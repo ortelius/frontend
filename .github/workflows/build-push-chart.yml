@@ -41,13 +41,13 @@ jobs:
       id-token: write
 
   trivy:
+    permissions:
+      security-events: write
+      statuses: write
     uses: ortelius/workflow-toolkit/.github/workflows/trivy-scan-workflow.yml@2695f78482e1bbd139d32be876ed34b2535bdc95
     needs:
       - setenv
       - release
-    permissions:
-      security-events: write
-      statuses: write
     with:
       gh_repository_owner: ${{ github.repository_owner }}
       gh_event_name: ${{ github.event_name }}
