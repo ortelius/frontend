@@ -183,6 +183,7 @@ export const GET_AFFECTED_RELEASES = `
       vulnerability_count_delta
       modified
       published
+      is_latest
     }
   }
 `

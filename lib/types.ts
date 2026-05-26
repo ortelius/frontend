@@ -192,6 +192,7 @@ export interface AffectedRelease {
   modified: string
   published?: string
   version_count?: number
+  is_latest: boolean
 }
 
 export interface GetAffectedReleasesResponse {
@@ -263,6 +264,7 @@ export interface ImageData {
   version_count: number
   total_vulnerabilities: number
   vulnerability_count_delta: number
+  is_latest: boolean
 }
 
 // --- Org Aggregation Types ---
