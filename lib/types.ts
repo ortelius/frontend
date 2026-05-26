@@ -286,3 +286,20 @@ export interface OrgAggregatedRelease {
 export interface GetOrgAggregatedReleasesResponse {
   orgAggregatedReleases: OrgAggregatedRelease[]
 }
+
+export interface ReleaseTimelineEntry {
+  version: string
+  build_date: string | null
+  endpoint_count: number
+  critical_count: number
+  high_count: number
+  medium_count: number
+  low_count: number
+  total_cves: number
+  content_sha: string
+  is_latest: boolean
+}
+
+export interface GetReleaseTimelineResponse {
+  releaseTimeline: ReleaseTimelineEntry[]
+}

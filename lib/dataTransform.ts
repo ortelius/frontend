@@ -57,11 +57,11 @@ export function getRelativeTime (dateString: string): string {
 export function transformAffectedReleasesToImageData (
   affectedReleases: AffectedRelease[]
 ): ImageData[] {
-  // Group by release (name + version)
+  // Group by release name only — one card per release, showing the latest version
   const releaseMap = new Map<string, AffectedRelease[]>()
 
   affectedReleases.forEach(ar => {
-    const key = `${String(ar.release_name)}:${String(ar.release_version)}`
+    const key = String(ar.release_name)
     if (!releaseMap.has(key)) {
       releaseMap.set(key, [])
     }
@@ -75,9 +75,14 @@ export function transformAffectedReleasesToImageData (
   const imageDataList: ImageData[] = []
 
   releaseMap.forEach((releases, key) => {
-    const firstRelease = releases[0]
+    // Pick the is_latest row as representative — it has the correct latest version,
+    // vulnerability_count, synced_endpoint_count, and other card metadata.
+    const firstRelease = releases.find(r => r.is_latest) ?? releases[0]
 
-    // Count vulnerabilities from the releases array (each item is a CVE)
+    // Count vulnerabilities from rows matching the latest version only
+    const latestVersion = firstRelease.release_version
+    const latestRows = releases.filter(r => r.release_version === latestVersion)
+
     const vulnCounts = {
       critical: 0,
       high: 0,
@@ -85,7 +90,7 @@ export function transformAffectedReleasesToImageData (
       low: 0
     }
 
-    releases.forEach(r => {
+    latestRows.forEach(r => {
       const rating = r.severity_rating?.toLowerCase()
       if (rating === 'critical') vulnCounts.critical++
       else if (rating === 'high') vulnCounts.high++
@@ -94,7 +99,7 @@ export function transformAffectedReleasesToImageData (
     })
 
     // Get the most recent modified date, falling back to published date
-    const mostRecentDate = releases.reduce((latest, r) => {
+    const mostRecentDate = latestRows.reduce((latest, r) => {
       // Try modified first, then published
       const dateStr = r.modified || r.published
       if (!dateStr) return latest
@@ -131,7 +136,8 @@ export function transformAffectedReleasesToImageData (
       syncedEndpoints: firstRelease.synced_endpoint_count ?? 0,
       version_count: firstRelease.version_count ?? 1,
       total_vulnerabilities: totalVulnerabilities,
-      vulnerability_count_delta: vulnerabilityCountDelta
+      vulnerability_count_delta: vulnerabilityCountDelta,
+      is_latest: firstRelease.is_latest ?? true
     })
   })
 

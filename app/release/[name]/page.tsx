@@ -6,8 +6,8 @@ import { useState, useEffect } from 'react'
 // --- Component Imports ---
 import Sidebar from '@/components/Sidebar'
 import SyncedEndpoints from '@/components/SyncedEndpoints'
-import { graphqlQuery, GET_RELEASE } from '@/lib/graphql'
-import { GetReleaseResponse, Release } from '@/lib/types'
+import { graphqlQuery, GET_RELEASE, GET_RELEASE_TIMELINE } from '@/lib/graphql'
+import { GetReleaseResponse, Release, ReleaseTimelineEntry, GetReleaseTimelineResponse } from '@/lib/types'
 import { getRelativeTime } from '@/lib/dataTransform'
  
 // --- Material UI Icon Imports ---
@@ -36,6 +36,8 @@ export default function ReleaseVersionDetailPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [isEndpointsModalOpen, setIsEndpointsModalOpen] = useState(false)
+  const [timeline, setTimeline] = useState<ReleaseTimelineEntry[]>([])
+  const [timelineLoading, setTimelineLoading] = useState(false)
   
   const releaseVersion = params.name as string
   const version = searchParams.get('version') || 'latest'
@@ -54,10 +56,15 @@ export default function ReleaseVersionDetailPage() {
         setLoading(true)
         setError(null)
 
-        const response = await graphqlQuery<GetReleaseResponse>(GET_RELEASE, { name: releaseVersion, version })
-        const releaseData = response.release
-        setRelease(releaseData)
+        let response = await graphqlQuery<GetReleaseResponse>(GET_RELEASE, { name: releaseVersion, version })
+        let releaseData = response.release
 
+        if (!releaseData) {
+          setError('Version ' + version + ' not found')
+          return
+        }
+
+        setRelease(releaseData)
         setVulnerabilities(releaseData.vulnerabilities)
 
         let pkgData: Array<{ name: string; version: string; purl?: string }> = []
@@ -97,6 +104,26 @@ export default function ReleaseVersionDetailPage() {
     if (releaseVersion) fetchRelease()
   }, [releaseVersion, version])
 
+  // Fetch timeline separately — only needs release name, not version
+  useEffect(() => {
+    const fetchTimeline = async () => {
+      if (!releaseVersion) return
+      try {
+        setTimelineLoading(true)
+        const response = await graphqlQuery<GetReleaseTimelineResponse>(
+          GET_RELEASE_TIMELINE,
+          { name: decodeURIComponent(releaseVersion) }
+        )
+        setTimeline(response.releaseTimeline || [])
+      } catch (err) {
+        console.error('Failed to fetch release timeline:', err)
+      } finally {
+        setTimelineLoading(false)
+      }
+    }
+    fetchTimeline()
+  }, [releaseVersion])
+
   const handleFilterChange = (updater: any) => {
     const currentFilters = {
       vulnerabilityScore: selectedSeverities,
@@ -116,6 +143,25 @@ export default function ReleaseVersionDetailPage() {
     if (newFilters.vulnerabilityScore) setSelectedSeverities(newFilters.vulnerabilityScore)
     if (newFilters.packageFilter !== undefined) setPackageFilter(newFilters.packageFilter)
     if (newFilters.searchCVE !== undefined) setSearchCVE(newFilters.searchCVE)
+  }
+
+
+  // Close popover when clicking outside
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      const root = document.getElementById('version-popover-root')
+      if (root && !root.contains(e.target as Node)) {
+        const el = document.getElementById('version-popover')
+        if (el) el.style.display = 'none'
+      }
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [])
+
+  const handleTimelineVersionSelect = (selectedVersion: string) => {
+    // releaseVersion from params.name is already decoded by Next.js — encode once
+    router.push(`/release/${encodeURIComponent(decodeURIComponent(releaseVersion))}?version=${encodeURIComponent(selectedVersion)}`)
   }
 
   const renderLayout = (content: React.ReactNode) => (
@@ -256,19 +302,87 @@ export default function ReleaseVersionDetailPage() {
 
         <main className="p-6 space-y-6">
           
-          <div className="flex items-center gap-4 mb-6">
+          {/* HEADER ROW — name + timeline side by side */}
+          <div className="flex items-start gap-6">
+            {/* Left: back + title */}
+            <div className="flex items-center gap-4 flex-shrink-0">
               <button
-                  onClick={() => router.back()}
-                  className="flex items-center text-blue-600 hover:text-blue-700 transition-colors text-sm font-medium"
-                  aria-label="Go back to previous page"
+                onClick={() => router.back()}
+                className="flex items-center text-blue-600 hover:text-blue-700 transition-colors text-sm font-medium"
+                aria-label="Go back to previous page"
               >
-                  <ArrowBackIcon sx={{ width: 16, height: 16 }} />
-                  <span className="ml-1">Back</span>
+                <ArrowBackIcon sx={{ width: 16, height: 16 }} />
+                <span className="ml-1">Back</span>
               </button>
               <h1 className="text-2xl font-bold text-gray-900">
-                  {release.name} <span className="text-gray-500 font-normal">({release.version})</span>
+                {release.name} <span className="text-gray-500 font-normal">({release.version})</span>
               </h1>
+            </div>
+
+            {/* Right: version history popover */}
+            {!timelineLoading && timeline.length > 1 && (
+              <div className="relative flex-shrink-0" id="version-popover-root">
+                <button
+                  onClick={() => {
+                    const el = document.getElementById('version-popover')
+                    if (el) el.style.display = el.style.display === 'none' ? 'block' : 'none'
+                  }}
+                  className="flex items-center gap-1.5 text-sm px-3 py-1.5 border border-gray-200 rounded-md bg-white text-gray-700 hover:bg-gray-50 hover:border-gray-300 transition-colors cursor-pointer"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                  {timeline.length} versions
+                </button>
+
+                <div
+                  id="version-popover"
+                  style={{ display: 'none', position: 'absolute', top: '36px', right: 0, zIndex: 50, width: '480px' }}
+                  className="bg-white border border-gray-200 rounded-lg shadow-lg overflow-hidden"
+                >
+                  <div className="grid text-xs font-medium text-gray-500 bg-gray-50 border-b border-gray-100 px-3 py-2" style={{ gridTemplateColumns: '1fr 72px 36px 36px 36px 36px 52px' }}>
+                    <span>Version</span>
+                    <span>Built</span>
+                    <span className="text-red-600 text-center">Crit</span>
+                    <span className="text-orange-500 text-center">High</span>
+                    <span className="text-yellow-600 text-center">Med</span>
+                    <span className="text-blue-600 text-center">Low</span>
+                    <span className="text-right">Endpoints</span>
+                  </div>
+                  <div className="overflow-y-auto" style={{ maxHeight: '320px' }}>
+                    {timeline.map((entry) => {
+                      const isSelected = entry.version === version
+                      return (
+                        <div
+                          key={entry.version}
+                          onClick={() => {
+                            handleTimelineVersionSelect(entry.version)
+                            const el = document.getElementById('version-popover')
+                            if (el) el.style.display = 'none'
+                          }}
+                          className={`grid items-center px-3 py-2 cursor-pointer text-xs border-b border-gray-50 transition-colors ${isSelected ? 'bg-blue-50' : 'hover:bg-gray-50'}`}
+                          style={{ gridTemplateColumns: '1fr 72px 36px 36px 36px 36px 52px' }}
+                        >
+                          <span className="flex items-center gap-1.5 font-medium truncate pr-2" style={{ color: isSelected ? '#185FA5' : 'inherit' }}>
+                            {isSelected && <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#185FA5', flexShrink: 0 }} />}
+                            <span className="truncate">{entry.version}</span>
+                            {entry.is_latest && <span className="text-[9px] font-bold text-green-700 bg-green-100 px-1 py-0.5 rounded flex-shrink-0">LATEST</span>}
+                          </span>
+                          <span className="text-gray-400 text-[11px]">
+                            {entry.build_date ? new Date(entry.build_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: '2-digit' }) : '-'}
+                          </span>
+                          <span className={`text-center font-medium ${entry.critical_count > 0 ? 'text-red-600' : 'text-gray-300'}`}>{entry.critical_count || '-'}</span>
+                          <span className={`text-center font-medium ${entry.high_count > 0 ? 'text-orange-500' : 'text-gray-300'}`}>{entry.high_count || '-'}</span>
+                          <span className={`text-center font-medium ${entry.medium_count > 0 ? 'text-yellow-600' : 'text-gray-300'}`}>{entry.medium_count || '-'}</span>
+                          <span className={`text-center font-medium ${entry.low_count > 0 ? 'text-blue-500' : 'text-gray-300'}`}>{entry.low_count || '-'}</span>
+                          <span className="text-right text-gray-500">{entry.endpoint_count}</span>
+                        </div>
+                      )
+                    })}
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
+
 
           {/* SUMMARY GRID - ADDED export-card */}
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-4 text-center bg-white p-4 rounded-lg border border-gray-200 shadow-sm export-card">

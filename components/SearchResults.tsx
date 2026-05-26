@@ -244,15 +244,20 @@ export default function SearchResults({ query, category, filters }: SearchResult
       if (filters.name && !result.name.toLowerCase().includes(nameLower)) return false
       if (filters.vulnerabilityScore.length > 0) {
         const hasNoVulnerabilities = result.vulnerabilities.critical === 0 && result.vulnerabilities.high === 0 && result.vulnerabilities.medium === 0 && result.vulnerabilities.low === 0
-        const matchesFilter = filters.vulnerabilityScore.some(filter => {
-          if (filter === 'clean') return hasNoVulnerabilities
-          if (filter === 'critical') return result.vulnerabilities.critical > 0
-          if (filter === 'high') return result.vulnerabilities.high > 0
-          if (filter === 'medium') return result.vulnerabilities.medium > 0
-          if (filter === 'low') return result.vulnerabilities.low > 0
-          return false
-        })
-        if (!matchesFilter) return false
+        // Always show the latest version card so users can see the current state,
+        // even if it has no CVEs matching the active severity filter.
+        const isLatest = (result as any).is_latest !== false
+        if (!isLatest) {
+          const matchesFilter = filters.vulnerabilityScore.some(filter => {
+            if (filter === 'clean') return hasNoVulnerabilities
+            if (filter === 'critical') return result.vulnerabilities.critical > 0
+            if (filter === 'high') return result.vulnerabilities.high > 0
+            if (filter === 'medium') return result.vulnerabilities.medium > 0
+            if (filter === 'low') return result.vulnerabilities.low > 0
+            return false
+          })
+          if (!matchesFilter) return false
+        }
       }
       if (filters.openssfScore.length > 0) {
         const matchesFilter = filters.openssfScore.some(filter => {

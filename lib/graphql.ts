@@ -390,3 +390,20 @@ export const GET_MTTR_ANALYSIS = `
     }
   }
 `
+
+export const GET_RELEASE_TIMELINE = `
+  query GetReleaseTimeline($name: String!) {
+    releaseTimeline(name: $name) {
+      version
+      build_date
+      endpoint_count
+      critical_count
+      high_count
+      medium_count
+      low_count
+      total_cves
+      content_sha
+      is_latest
+    }
+  }
+`
