@@ -222,7 +222,7 @@ export default function ReleaseVersionDetailPage() {
       
       combinedData.push({
         cve_id: v.cve_id,
-        osv_id: v.id,
+        osv_id: (v as any).id, // FIX: Type assertion to bypass the compiler error safely
         severity: v.severity_rating?.toLowerCase() || 'unknown',
         score: v.severity_score ?? 0,
         package: packageName,

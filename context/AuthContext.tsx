@@ -20,6 +20,7 @@ interface AuthContextValue {
   hasRole: (roles: string[]) => boolean
   /** Returns true if the user belongs to the given org */
   hasOrg: (org: string) => boolean
+  isLoading: boolean // 👈 1. ADDED TO INTERFACE TO RESOLVE TYPE ERROR
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null)
@@ -112,8 +113,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     [user]
   )
 
+  // 2. COMPUTE THE LOADING FLAG DYNAMICALLY
+  const isLoading = user === undefined
+
+  // 3. EXPOSE ISLOADING THROUGH THE VALUE MAP
   return (
-    <AuthContext.Provider value={{ user, setUser, login, logout, refresh, hasRole, hasOrg }}>
+    <AuthContext.Provider value={{ user, setUser, login, logout, refresh, hasRole, hasOrg, isLoading }}>
       {children}
     </AuthContext.Provider>
   )
@@ -125,5 +130,4 @@ export function useAuth(): AuthContextValue {
   return ctx
 }
 
-// Default export for legacy imports (AuthWrapper.tsx uses `import AuthContext from ...`)
 export default AuthContext

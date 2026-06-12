@@ -30,6 +30,10 @@ export default function ProjectsPage() {
     orgVisibility: ['myOrgs', 'public'],
   })
 
+  // ADD THESE TWO LINES TO RESOLVE THE COMPILE ERROR:
+  const showMyOrgs = filters.orgVisibility.includes('myOrgs')
+  const showPublic = filters.orgVisibility.includes('public')
+  
   const isLoggedIn = !!user
 
   const filteredData = data.filter(org => {
