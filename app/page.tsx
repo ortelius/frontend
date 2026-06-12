@@ -30,14 +30,14 @@ export default function ProjectsPage() {
     orgVisibility: ['myOrgs', 'public'],
   })
 
-  // ADD THESE TWO LINES TO RESOLVE THE COMPILE ERROR:
+  const isLoggedIn = !!user
+  
+  // Declared local visibility flags to handle empty state logic safely
   const showMyOrgs = filters.orgVisibility.includes('myOrgs')
   const showPublic = filters.orgVisibility.includes('public')
-  
-  const isLoggedIn = !!user
 
   const filteredData = data.filter(org => {
-    const isPending = (org as any).pending_scan === true
+    const isPending = org.pending_scan === true
     const isMyOrg = user?.orgs?.includes(org.org_name) || isPending
     const isPublic = !isMyOrg
     const vis = filters.orgVisibility ?? ['myOrgs', 'public']
@@ -109,7 +109,7 @@ export default function ProjectsPage() {
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 pb-6">
               {filteredData.map((org, idx) => {
-                const isPending = (org as any).pending_scan === true
+                const isPending = org.pending_scan === true
 
                 return (
                   <div
