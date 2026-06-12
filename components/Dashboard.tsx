@@ -194,8 +194,8 @@ const SmPanel = ({
       </div>
 
       {/* Chart */}
-      <div style={{ flex: 1, height: panel.height }}>
-        <ResponsiveContainer width="100%" height="100%">
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <ResponsiveContainer width="100%" height={panel.height}>
           <AreaChart
             data={data}
             margin={{ top: 4, right: 6, left: 0, bottom: isLast ? 14 : 2 }}
@@ -628,8 +628,8 @@ export default function Dashboard() {
               </div>
             </div>
 
-            <div className="flex-1" style={{ minHeight: '200px' }}>
-              <ResponsiveContainer width="100%" height="100%">
+            <div style={{ height: 200 }}>
+              <ResponsiveContainer width="100%" height={200}>
                 <BarChart data={volumeChartData} margin={{ top: 10, right: 0, left: -20, bottom: 0 }}>
                   <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f0f0f0" />
                   <XAxis dataKey="name" tick={{ fontSize: 11 }} />

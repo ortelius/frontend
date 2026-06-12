@@ -4,7 +4,7 @@ import { SidebarProvider } from '@/context/SidebarContext'
 import { ThemeProvider } from '@/context/ThemeContext'
 import { ExportProvider } from '@/context/ExportContext'
 import { OrgProvider } from '@/context/OrgContext'
-import AuthWrapper from '@/components/AuthWrapper' 
+import { AuthProvider } from '@/context/AuthContext' 
 import ExportManager from '@/components/ExportManager'
 import TopNavigation from '@/components/TopNavigation'
 import './globals.css'
@@ -49,15 +49,15 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           }}
         />
       </head>
-      <body className="overflow-hidden">
+      <body>
         <ThemeProvider>
-          <AuthWrapper>
+          <AuthProvider>
             <ExportProvider>
               <OrgProvider>
                 <SidebarProvider>
                   <div className="flex flex-col h-screen">
                     <TopNavigation />
-                    <div className="flex flex-1 overflow-hidden">
+                    <div className="flex flex-1 min-h-0">
                       <ExportManager />
                       {children}
                     </div>
@@ -65,7 +65,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
                 </SidebarProvider>
               </OrgProvider>
             </ExportProvider>
-          </AuthWrapper>
+          </AuthProvider>
         </ThemeProvider>
       </body>
     </html>

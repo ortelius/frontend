@@ -26,12 +26,14 @@ interface SidebarProps {
     endpointType?: string[]
     packageFilter?: string
     searchCVE?: string
+    orgVisibility?: string[]  // 'myOrgs' | 'public'
   }
   setFilters?: (filters: any) => void
   selectedCategory?: string
+  isLoggedIn?: boolean
 }
 
-export default function Sidebar({ filters, setFilters, selectedCategory }: SidebarProps) {
+export default function Sidebar({ filters, setFilters, selectedCategory, isLoggedIn }: SidebarProps) {
   const pathname = usePathname()
   const { isExpanded, toggleSidebar } = useSidebar()
   const { isDark } = useTheme()
@@ -89,7 +91,7 @@ export default function Sidebar({ filters, setFilters, selectedCategory }: Sideb
   const isDetailView = selectedCategory === 'endpoint-detail' || selectedCategory === 'release-detail'
   const showNameFilter = !isDetailView
   const showStatusFilters = selectedCategory === 'image'
-  const showVulnScoreFilter = true
+  const showVulnScoreFilter = selectedCategory !== 'orgs'
   const showOpenSSFScoreFilter = selectedCategory === 'all'
   const showDetailFilters = isDetailView
   const showFilters = filters && setFilters && selectedCategory
@@ -126,13 +128,14 @@ export default function Sidebar({ filters, setFilters, selectedCategory }: Sideb
       environment: [],
       endpointType: [],
       packageFilter: '',
-      searchCVE: ''
+      searchCVE: '',
+      orgVisibility: ['myOrgs', 'public'],
     })
   }
 
   return (
     <aside 
-      className={`${!isExpanded ? 'w-20' : 'w-64'} border-r flex flex-col h-full overflow-y-auto flex-shrink-0 transition-all duration-300 ease-in-out`}
+      className={`${!isExpanded ? 'w-20' : 'w-64'} border-r flex flex-col flex-shrink-0 overflow-y-auto transition-all duration-300 ease-in-out`}
       style={{ 
         backgroundColor: isDark ? '#0d1117' : '#ffffff',
         borderColor: isDark ? '#21262d' : '#f3f4f6'
@@ -188,6 +191,33 @@ export default function Sidebar({ filters, setFilters, selectedCategory }: Sideb
 
           {isFiltersOpen && filters && (
             <div className="space-y-6">
+              {selectedCategory === 'orgs' && (
+                <div>
+                  <label className="text-xs font-semibold text-gray-700 dark:text-[#c9d1d9] mb-2 block">View</label>
+                  <div className="space-y-1.5">
+                    {isLoggedIn && (
+                      <label className="flex items-center cursor-pointer group">
+                        <input
+                          type="checkbox"
+                          checked={filters?.orgVisibility?.includes('myOrgs') ?? true}
+                          onChange={() => handleCheckboxChange('orgVisibility', 'myOrgs')}
+                          className={checkboxClasses}
+                        />
+                        <span className="ml-2 text-xs text-gray-700 dark:text-[#c9d1d9] group-hover:text-gray-900 dark:group-hover:text-[#e6edf3]">My Orgs</span>
+                      </label>
+                    )}
+                    <label className="flex items-center cursor-pointer group">
+                      <input
+                        type="checkbox"
+                        checked={filters?.orgVisibility?.includes('public') ?? true}
+                        onChange={() => handleCheckboxChange('orgVisibility', 'public')}
+                        className={checkboxClasses}
+                      />
+                      <span className="ml-2 text-xs text-gray-700 dark:text-[#c9d1d9] group-hover:text-gray-900 dark:group-hover:text-[#e6edf3]">Public</span>
+                    </label>
+                  </div>
+                </div>
+              )}
               {showNameFilter && (
                 <div>
                   <label className="text-xs font-semibold text-gray-700 dark:text-[#c9d1d9] mb-2 block">Name</label>
@@ -303,7 +333,7 @@ export default function Sidebar({ filters, setFilters, selectedCategory }: Sideb
       )}
 
       {/* Auth Slot */}
-      <div>
+      <div className="border-t" style={{ borderColor: isDark ? '#21262d' : '#f3f4f6' }}>
         <AuthProfile isExpanded={isExpanded} />
 
         {/* Save as SVG Button */}

@@ -8,13 +8,15 @@ interface FilterSidebarProps {
     status?: string[]
     environment?: string[]
     endpointType?: string[]
+    orgVisibility?: string[]  // 'myOrgs' | 'public'
   }
   setFilters: (filters: any) => void
   selectedCategory: string
+  isLoggedIn?: boolean
 }
 
-export default function FilterSidebar({ filters, setFilters, selectedCategory }: FilterSidebarProps) {
-  const handleCheckboxChange = (category: 'vulnerabilityScore' | 'openssfScore' | 'status' | 'environment' | 'endpointType', value: string) => {
+export default function FilterSidebar({ filters, setFilters, selectedCategory, isLoggedIn }: FilterSidebarProps) {
+  const handleCheckboxChange = (category: 'vulnerabilityScore' | 'openssfScore' | 'status' | 'environment' | 'endpointType' | 'orgVisibility', value: string) => {
     setFilters((prev: any) => {
       const currentValues = prev[category] || []
       const newValues = currentValues.includes(value)
@@ -43,6 +45,7 @@ export default function FilterSidebar({ filters, setFilters, selectedCategory }:
       status: [],
       environment: [],
       endpointType: [],
+      orgVisibility: ['myOrgs', 'public'],
     })
   }
 
@@ -53,6 +56,8 @@ export default function FilterSidebar({ filters, setFilters, selectedCategory }:
     (filters.status && filters.status.length > 0) ||
     (filters.environment && filters.environment.length > 0) ||
     (filters.endpointType && filters.endpointType.length > 0)
+
+  const orgVisibility = filters.orgVisibility ?? ['myOrgs', 'public']
 
   return (
     <aside className="w-64 flex-shrink-0">
@@ -69,8 +74,37 @@ export default function FilterSidebar({ filters, setFilters, selectedCategory }:
           )}
         </div>
 
-        <div className="mb-6">
-          <h4 className="text-sm font-semibold text-gray-900 mb-3">Name</h4>
+        {/* Org visibility — only shown on the orgs page */}
+        {selectedCategory === 'orgs' && (
+          <div className="mb-5">
+            <h4 className="text-sm font-medium text-gray-700 mb-2">View</h4>
+            <div className="space-y-2">
+              {isLoggedIn && (
+                <label className="flex items-center cursor-pointer group">
+                  <input
+                    type="checkbox"
+                    checked={orgVisibility.includes('myOrgs')}
+                    onChange={() => handleCheckboxChange('orgVisibility', 'myOrgs')}
+                    className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                  />
+                  <span className="ml-2 text-sm text-gray-700 group-hover:text-gray-900">My Orgs</span>
+                </label>
+              )}
+              <label className="flex items-center cursor-pointer group">
+                <input
+                  type="checkbox"
+                  checked={orgVisibility.includes('public')}
+                  onChange={() => handleCheckboxChange('orgVisibility', 'public')}
+                  className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                />
+                <span className="ml-2 text-sm text-gray-700 group-hover:text-gray-900">Public</span>
+              </label>
+            </div>
+          </div>
+        )}
+
+        <div className="mb-5">
+          <h4 className="text-sm font-medium text-gray-700 mb-2">Name</h4>
           <input
             type="text"
             value={filters.name}
@@ -83,8 +117,8 @@ export default function FilterSidebar({ filters, setFilters, selectedCategory }:
         {/* Synced Endpoints specific filters */}
         {selectedCategory === 'image' && (
           <>
-            <div className="mb-6">
-              <h4 className="text-sm font-semibold text-gray-900 mb-3">Status</h4>
+            <div className="mb-5">
+              <h4 className="text-sm font-medium text-gray-700 mb-2">Status</h4>
               <div className="space-y-2">
                 <label className="flex items-center cursor-pointer group">
                   <input
@@ -116,8 +150,8 @@ export default function FilterSidebar({ filters, setFilters, selectedCategory }:
               </div>
             </div>
 
-            <div className="mb-6">
-              <h4 className="text-sm font-semibold text-gray-900 mb-3">Environment</h4>
+            <div className="mb-5">
+              <h4 className="text-sm font-medium text-gray-700 mb-2">Environment</h4>
               <div className="space-y-2">
                 <label className="flex items-center cursor-pointer group">
                   <input
@@ -158,8 +192,8 @@ export default function FilterSidebar({ filters, setFilters, selectedCategory }:
               </div>
             </div>
 
-            <div className="mb-6">
-              <h4 className="text-sm font-semibold text-gray-900 mb-3">Endpoint Type</h4>
+            <div className="mb-5">
+              <h4 className="text-sm font-medium text-gray-700 mb-2">Endpoint Type</h4>
               <div className="space-y-2">
                 <label className="flex items-center cursor-pointer group">
                   <input
@@ -205,8 +239,8 @@ export default function FilterSidebar({ filters, setFilters, selectedCategory }:
         {/* Project Releases, Vulnerabilities, and Mitigations filters */}
         {(selectedCategory === 'all' || selectedCategory === 'plugin' || selectedCategory === 'mitigations') && (
           <>
-            <div className="mb-6">
-              <h4 className="text-sm font-semibold text-gray-900 mb-3">Vulnerability Score</h4>
+            <div className="mb-5">
+              <h4 className="text-sm font-medium text-gray-700 mb-2">Vulnerability Score</h4>
               <div className="space-y-2">
                 <label className="flex items-center cursor-pointer group">
                   <input
@@ -257,7 +291,7 @@ export default function FilterSidebar({ filters, setFilters, selectedCategory }:
             </div>
 
             <div>
-              <h4 className="text-sm font-semibold text-gray-900 mb-3">OpenSSF Score</h4>
+              <h4 className="text-sm font-medium text-gray-700 mb-2">OpenSSF Score</h4>
               <div className="space-y-2">
                 <label className="flex items-center cursor-pointer group">
                   <input
@@ -276,10 +310,7 @@ export default function FilterSidebar({ filters, setFilters, selectedCategory }:
                     className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
                   />
                   <span className="ml-2 text-sm text-gray-700 group-hover:text-gray-900">Medium (6.0-7.9)</span>
-                </label> 
-                {/* --- THIS WAS THE ERROR ---
-                </entry>
-                --- THIS IS THE FIX --- */}
+                </label>
                 <label className="flex items-center cursor-pointer group">
                   <input
                     type="checkbox"

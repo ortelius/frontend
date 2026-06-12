@@ -202,6 +202,7 @@ export default function ReleaseVersionDetailPage() {
 
   const combinedData: Array<{
     cve_id: string
+    osv_id?: string
     severity: string
     score: number
     package: string
@@ -221,6 +222,7 @@ export default function ReleaseVersionDetailPage() {
       
       combinedData.push({
         cve_id: v.cve_id,
+        osv_id: v.id,
         severity: v.severity_rating?.toLowerCase() || 'unknown',
         score: v.severity_score ?? 0,
         package: packageName,
@@ -323,9 +325,19 @@ export default function ReleaseVersionDetailPage() {
             {!timelineLoading && timeline.length > 1 && (
               <div className="relative flex-shrink-0" id="version-popover-root">
                 <button
-                  onClick={() => {
+                  onClick={(e) => {
                     const el = document.getElementById('version-popover')
-                    if (el) el.style.display = el.style.display === 'none' ? 'block' : 'none'
+                    if (!el) return
+                    if (el.style.display !== 'none') {
+                      el.style.display = 'none'
+                    } else {
+                      const btn = e.currentTarget as HTMLButtonElement
+                      const rect = btn.getBoundingClientRect()
+                      el.style.top = (rect.bottom + 4) + 'px'
+                      const leftPos = rect.right - 480
+                      el.style.left = Math.max(8, leftPos) + 'px'
+                      el.style.display = 'block'
+                    }
                   }}
                   className="flex items-center gap-1.5 text-sm px-3 py-1.5 border border-gray-200 rounded-md bg-white text-gray-700 hover:bg-gray-50 hover:border-gray-300 transition-colors cursor-pointer"
                 >
@@ -335,7 +347,7 @@ export default function ReleaseVersionDetailPage() {
 
                 <div
                   id="version-popover"
-                  style={{ display: 'none', position: 'absolute', top: '36px', right: 0, zIndex: 50, width: '480px' }}
+                  style={{ display: 'none', position: 'fixed', zIndex: 9999, width: '480px' }}
                   className="bg-white border border-gray-200 rounded-lg shadow-lg overflow-hidden"
                 >
                   <div className="grid text-xs font-medium text-gray-500 bg-gray-50 border-b border-gray-100 px-3 py-2" style={{ gridTemplateColumns: '1fr 72px 36px 36px 36px 36px 52px' }}>
@@ -490,7 +502,18 @@ export default function ReleaseVersionDetailPage() {
                 <tbody>
                   {combinedData.map((row, index) => (
                     <tr key={index} className="border-b hover:bg-gray-50 transition-colors">
-                      <td className="px-4 py-2 text-sm">{row.cve_id}</td>
+                      <td className="px-4 py-2 text-sm">
+                        {row.cve_id !== '—' ? (
+                          <a
+                            href={`https://osv.dev/vulnerability/${row.osv_id ?? row.cve_id}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-blue-600 hover:text-blue-800 hover:underline"
+                          >
+                            {row.cve_id}
+                          </a>
+                        ) : '—'}
+                      </td>
                       <td className="px-4 py-2 text-sm">
                         {row.severity === 'clean' ? (
                           <span className="px-2 py-1 rounded text-xs font-medium bg-green-100 text-green-800 flex items-center gap-1 w-fit">
@@ -565,8 +588,8 @@ export default function ReleaseVersionDetailPage() {
                   <li><span className="font-medium">Tag:</span> {release.git_tag || '—'}</li>
                   <li><span className="font-medium">Repo:</span> {release.git_repo || '—'}</li>
                   <li><span className="font-medium">Org:</span> {release.git_org || '—'}</li>
-                  <li><span className="font-medium">URL:</span> <a href={release.git_url || '#'} className="text-blue-600 truncate block w-full">{release.git_url || '—'}</a></li>
                   <li><span className="font-medium">Project:</span> {release.git_repo_project || '—'}</li>
+                  <li className="flex gap-1 min-w-0"><span className="font-medium shrink-0">URL:</span> <a href={release.git_url || '#'} className="text-blue-600 truncate">{release.git_url || '—'}</a></li>
                 </ul>
               </div>
 

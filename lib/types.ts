@@ -305,3 +305,20 @@ export interface ReleaseTimelineEntry {
 export interface GetReleaseTimelineResponse {
   releaseTimeline: ReleaseTimelineEntry[]
 }
+
+ export interface OrgAggregatedRelease {
+   org_name: string
+   total_releases: number
+   total_versions: number
+   total_vulnerabilities: number
+   critical_count: number
+   high_count: number
+   medium_count: number
+   low_count: number
+   max_severity_score: number | null
+   avg_scorecard_score: number | null
+   total_dependencies: number
+   synced_endpoint_count: number
+   vulnerability_count_delta: number | null
+   pending_scan?: boolean   // ← ADD THIS
+ }
