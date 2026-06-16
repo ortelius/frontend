@@ -18,6 +18,11 @@ const nextConfig = {
     'recharts',
     'react-loading-skeleton'
   ],
+
+  // ─── NATIVE NEXT.JS 16 FIX FOR PDFKIT ──────────────────────────────
+  serverExternalPackages: ['pdfkit'],
+  // ───────────────────────────────────────────────────────────────────
+
   webpack: (config) => {
     config.resolve.alias['@'] = __dirname
     return config

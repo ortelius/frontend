@@ -13,6 +13,7 @@ import StarIcon from '@mui/icons-material/Star'
 import WhatshotIcon from '@mui/icons-material/Whatshot'
 import NotificationsIcon from '@mui/icons-material/Notifications'
 import WarningIcon from '@mui/icons-material/Warning'
+import PictureAsPdfIcon from '@mui/icons-material/PictureAsPdf'
 
 // --- Local SVG Icon Imports ---
 import { Bomb } from '@/components/icons'
@@ -63,6 +64,7 @@ export default function EndpointDetailPage() {
   const [endpoint, setEndpoint] = useState<EndpointDetails | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [exportingPdf, setExportingPdf] = useState(false)
 
   const endpointName = decodeURIComponent(params.name as string)
 
@@ -96,6 +98,53 @@ export default function EndpointDetailPage() {
       fetchEndpoint()
     }
   }, [endpointName])
+
+  const handleExportPdf = async () => {
+    if (!endpoint) return
+    setExportingPdf(true)
+    try {
+      const payload = {
+        endpoint_name: endpoint.endpoint_name,
+        endpoint_type: endpoint.endpoint_type,
+        environment: endpoint.environment,
+        last_sync: endpoint.last_sync,
+        releases: (endpoint.releases || []).map(r => ({
+          release_name: r.release_name,
+          release_version: r.release_version,
+          vulnerabilities: (r.vulnerabilities || []).map(v => ({
+            cve_id: v.cve_id,
+            severity_rating: v.severity_rating,
+            severity_score: v.severity_score,
+            package: v.package,
+            affected_version: v.affected_version,
+            fixed_in: v.fixed_in || [],
+            full_purl: v.full_purl,
+          })),
+        })),
+      }
+
+      const res = await fetch('/api/generate-sbom-pdf', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      })
+
+      if (!res.ok) throw new Error(await res.text())
+
+      const blob = await res.blob()
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `${endpoint.endpoint_name}-sbom-${new Date().toISOString().split('T')[0]}.pdf`
+      a.click()
+      URL.revokeObjectURL(url)
+    } catch (err) {
+      console.error('PDF export failed:', err)
+      alert('PDF export failed. Please try again.')
+    } finally {
+      setExportingPdf(false)
+    }
+  }
 
   const getStatusColor = (status: string) => {
     const statusLower = status.toLowerCase()
@@ -232,7 +281,8 @@ export default function EndpointDetailPage() {
         selectedCategory="endpoint-detail"
       />
       <div className="flex-1 px-6 py-6 overflow-y-auto">
-        <div className="flex items-center gap-4 mb-6">
+        {/* ── Header row: back + name + badges + compliance link + PDF export button ── */}
+        <div className="flex items-center gap-3 mb-6 flex-wrap">
           <button
             onClick={() => router.back()}
             className="flex items-center text-blue-600 hover:text-blue-700 transition-colors text-sm font-medium"
@@ -241,13 +291,37 @@ export default function EndpointDetailPage() {
             <ArrowBackIcon sx={{ width: 16, height: 16 }} />
             <span className="ml-1">Back</span>
           </button>
+
           <h1 className="text-2xl font-bold text-gray-900">{endpoint.endpoint_name}</h1>
+
           <span className={`px-3 py-1 rounded text-sm font-medium ${getStatusColor(endpoint.status)}`}>
             {endpoint.status.toUpperCase()}
           </span>
           <span className={`px-3 py-1 rounded text-sm font-medium ${getEnvironmentColor(endpoint.environment)}`}>
             {endpoint.environment.toUpperCase()}
           </span>
+
+          {/* EO 14028 Compliance Reference Link Tag */}
+          <a
+            href="https://www.gsa.gov/technology/government-it-initiatives/cybersecurity/executive-order-14028"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="ml-auto inline-flex items-center px-3 py-1.5 rounded border border-blue-200 bg-blue-50 text-blue-700 hover:bg-blue-100 hover:border-blue-300 transition-colors text-xs font-semibold shadow-sm"
+            title="View official CISA documentation regarding Executive Order 14028 supply chain requirements"
+          >
+            EO 14028 Compliance
+          </a>
+
+          {/* SBOM PDF export button — right next to the compliance badge */}
+          <button
+            onClick={handleExportPdf}
+            disabled={exportingPdf}
+            className="flex items-center gap-2 px-4 py-2 rounded-md border border-red-300 bg-red-50 text-red-700 hover:bg-red-100 hover:border-red-400 transition-colors text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+            title="Export aggregated SBOM as PDF"
+          >
+            <PictureAsPdfIcon sx={{ width: 18, height: 18 }} />
+            {exportingPdf ? 'Generating PDF…' : 'Export SBOM PDF'}
+          </button>
         </div>
         
         <div className="bg-white border border-gray-200 rounded-lg p-6 mb-6">
@@ -285,7 +359,6 @@ export default function EndpointDetailPage() {
         
         <h3 className="text-lg font-semibold mt-6 mb-3 flex items-center gap-2">Release Versions ({endpoint.releases?.length || 0})</h3>
         
-        {/* ADDED bg-white HERE */}
         <div className="overflow-auto border rounded-lg max-h-96 bg-white">
           <table className="min-w-full divide-y divide-gray-200">
             <thead className="bg-gray-100 sticky top-0 z-10">
@@ -313,7 +386,6 @@ export default function EndpointDetailPage() {
           </table>
         </div>
 
-        {/* ADDED bg-white HERE */}
         <div className="overflow-auto border rounded-lg max-h-96 mt-6 bg-white">
           <table className="min-w-full divide-y divide-gray-200">
             <thead className="bg-gray-100 sticky top-0 z-10">
