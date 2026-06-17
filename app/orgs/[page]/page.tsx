@@ -195,8 +195,8 @@ export default function OrgSettingsPage() {
         }),
       })
       const data = await res.json()
-      if (!res.ok) throw new Error(data.error || 'Failed to watch repo')
-      setActionMessage(`✅ Now watching ${repo.full_name}`)
+      if (!res.ok) throw new Error(data.error || 'Failed to add favorite')
+      setActionMessage(`✅ Added ${repo.full_name} to Favorites`)
       fetchOrgStatus()
     } catch (err: any) {
       setActionMessage(`❌ ${err.message}`)
@@ -440,11 +440,11 @@ export default function OrgSettingsPage() {
             )}
           </div>
 
-          {/* ── Repo Search & Watch ── */}
+          {/* ── Repo Search & Favorites ── */}
           <div className="p-6 rounded-xl border shadow-sm" style={card}>
-            <h2 className="text-lg font-semibold mb-1" style={{ color: textPrimary }}>Watch Public Repositories</h2>
+            <h2 className="text-lg font-semibold mb-1" style={{ color: textPrimary }}>Favorite Public Repositories</h2>
             <p className="text-sm mb-4" style={{ color: textSecondary }}>
-              Search for a repo you deploy — e.g. <strong>nginx</strong>, <strong>curl</strong>, <strong>redis</strong>. Private repos require credentials configured above.
+              Search for a repo you deploy — e.g. <strong>nginx</strong>, <strong>curl</strong>, <strong>redis</strong>. Add it to Favorites and we’ll keep its vulnerability data fresh. Private repos require credentials configured above.
             </p>
 
             <form onSubmit={handleSearch} className="flex gap-3 items-end flex-wrap mb-4">
@@ -528,11 +528,11 @@ export default function OrgSettingsPage() {
                           }`}
                         >
                           {watched ? (
-                            <><CheckCircleIcon sx={{ fontSize: 14 }} /> Watching</>
+                            <><CheckCircleIcon sx={{ fontSize: 14 }} /> In Favorites</>
                           ) : actionLoading === loadKey ? (
                             'Adding...'
                           ) : (
-                            <><AddIcon sx={{ fontSize: 14 }} /> Watch</>
+                            <><AddIcon sx={{ fontSize: 14 }} /> Add to Favorites</>
                           )}
                         </button>
                       )}
@@ -547,18 +547,18 @@ export default function OrgSettingsPage() {
             )}
           </div>
 
-          {/* ── Watched Repos ── */}
+          {/* ── Favorite Repos ── */}
           <div className="p-6 rounded-xl border shadow-sm" style={card}>
             <h2 className="text-lg font-semibold mb-1" style={{ color: textPrimary }}>
-              Watched Repositories ({orgStatus?.tracked_repos.length ?? 0})
+              Favorite Repositories ({orgStatus?.tracked_repos.length ?? 0})
             </h2>
             <p className="text-sm mb-4" style={{ color: textSecondary }}>
-              These repos are scanned for CVEs automatically. "Hide" removes a repo from your view but keeps it scanning.
+              Favorites are scanned for CVEs automatically. "Hide" removes a repo from your view but keeps it scanning.
             </p>
 
             {!orgStatus?.tracked_repos.length ? (
               <div className="text-center py-8 border border-dashed rounded-lg" style={{ borderColor: isDark ? '#30363d' : '#d1d5db' }}>
-                <p className="text-sm" style={{ color: textSecondary }}>No repos watched yet. Search above to add some.</p>
+                <p className="text-sm" style={{ color: textSecondary }}>No favorite repos yet. Search above to add one.</p>
               </div>
             ) : (
               <div className="space-y-2">
@@ -618,7 +618,7 @@ export default function OrgSettingsPage() {
                   <div key={key} className="flex items-center justify-between px-3 py-2 rounded-lg text-sm" style={{ backgroundColor: isDark ? '#0d1117' : '#f9fafb' }}>
                     <span style={{ color: textSecondary }}>{key}</span>
                     <span className="text-xs" style={{ color: textSecondary }}>
-                      Search for it above to watch again
+                      Search for it above to add it to Favorites again
                     </span>
                   </div>
                 ))}

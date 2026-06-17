@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import Sidebar from '@/components/Sidebar'
 import { useAuth } from '@/context/AuthContext'
 import { useTheme } from '@/context/ThemeContext'
+import { fetchFavoriteOrgs, toggleFavoriteOrgOnServer } from '@/lib/favorites'
 
 // Icons
 import BusinessIcon from '@mui/icons-material/Business'
@@ -35,7 +36,7 @@ export default function ProfilePage() {
   const [repos, setRepos] = useState<any[]>([])
   const [loadingRepos, setLoadingRepos] = useState(false)
 
-  // Inline repo tracking — keyed by org name
+  // Inline repo favoriting — backed by the existing tracked-repos API
   const [expandedOrg, setExpandedOrg] = useState<string | null>(null)
   const [repoQuery, setRepoQuery] = useState('')
   const [repoProvider, setRepoProvider] = useState<'github' | 'gitlab'>('github')
@@ -44,8 +45,9 @@ export default function ProfilePage() {
   const [trackingRepo, setTrackingRepo] = useState<string | null>(null)
   const [trackMsg, setTrackMsg] = useState<{ org: string; msg: string; ok: boolean } | null>(null)
 
-  // System-level tracked repos list
+  // User favorite repos list — backed by the existing tracked-repos API
   const [trackedRepos, setTrackedRepos] = useState<any[]>([])
+  const [favoriteOrgs, setFavoriteOrgs] = useState<string[]>([])
   const [loadingTracked, setLoadingTracked] = useState(false)
   const [untrackingKey, setUntrackingKey] = useState<string | null>(null)
 
@@ -59,29 +61,61 @@ export default function ProfilePage() {
         setTrackedRepos(data.repos ?? [])
       }
     } catch (e) {
-      console.error('Failed to fetch tracked repos', e)
+      console.error('Failed to fetch favorite repos', e)
     } finally {
       setLoadingTracked(false)
     }
   }
 
+  const getRepoOwner = (repo: any) => {
+    if (repo.owner) return repo.owner
+    if (repo.full_name?.includes('/')) return repo.full_name.split('/')[0]
+    if (repo.key?.includes('/')) return repo.key.split('/')[0]
+    return ''
+  }
+
+  const favoriteTrackedRepos = trackedRepos.filter(repo => favoriteOrgs.includes(getRepoOwner(repo)))
+
+  const ensureFavoriteOrg = async (orgName: string) => {
+    if (!orgName || favoriteOrgs.includes(orgName)) return favoriteOrgs
+
+    const updatedFavorites = await toggleFavoriteOrgOnServer(orgName)
+    setFavoriteOrgs(updatedFavorites)
+    return updatedFavorites
+  }
+
+  const removeFavoriteOrg = async (orgName: string) => {
+    if (!orgName || !favoriteOrgs.includes(orgName)) return favoriteOrgs
+
+    const updatedFavorites = await toggleFavoriteOrgOnServer(orgName)
+    setFavoriteOrgs(updatedFavorites)
+    return updatedFavorites
+  }
+
   const handleUntrackRepo = async (repo: any) => {
     setUntrackingKey(repo.key)
+    setTrackMsg(null)
+
+    const owner = getRepoOwner(repo)
+
     try {
-      const endpoint = await getEndpoint()
-      const res = await fetch(`${endpoint}/tracked-repos/${repo.key}`, {
-        method: 'DELETE',
-        credentials: 'include',
-      })
-      const data = await res.json()
-      if (res.ok) {
-        setTrackedRepos(prev => prev.filter(r => r.key !== repo.key))
-      } else {
-        // Show conflict message inline
-        setTrackMsg({ org: 'system', msg: data.error || 'Failed to remove repo', ok: false })
+      // Favorites drive the user-visible list and org-card stars.
+      // The tracked-repos backend remains the scanning implementation behind the scenes.
+      await removeFavoriteOrg(owner)
+      setTrackedRepos(prev => prev.filter(r => r.key !== repo.key))
+      setTrackMsg({ org: 'system', msg: `Removed ${repo.owner}/${repo.name} from favorites`, ok: true })
+
+      try {
+        const endpoint = await getEndpoint()
+        await fetch(`${endpoint}/tracked-repos/${repo.key}`, {
+          method: 'DELETE',
+          credentials: 'include',
+        })
+      } catch (e) {
+        console.warn('Favorite removed, but tracked repo cleanup failed', e)
       }
     } catch (e) {
-      setTrackMsg({ org: 'system', msg: 'Network error', ok: false })
+      setTrackMsg({ org: 'system', msg: 'Could not remove favorite', ok: false })
     } finally {
       setUntrackingKey(null)
     }
@@ -94,6 +128,14 @@ export default function ProfilePage() {
         fetchProfile()
     }
   }, [user, router])
+
+  useEffect(() => {
+    if (!user) return
+
+    fetchFavoriteOrgs()
+      .then(setFavoriteOrgs)
+      .catch((e) => console.error('Failed to fetch favorites', e))
+  }, [user])
 
   const fetchProfile = async () => {
       try {
@@ -203,7 +245,8 @@ export default function ProfilePage() {
     setTrackMsg(null)
     try {
       const endpoint = await getEndpoint()
-      // POST to system-level endpoint — not org-scoped.
+      // UI calls this adding a favorite. The existing tracked-repos backend
+      // ensures the repo is watched/scanned behind the scenes.
       // The repo's native owner (curl, kubernetes, etc.) becomes its org in the dashboard.
       const res = await fetch(`${endpoint}/tracked-repos`, {
         method: 'POST',
@@ -217,11 +260,12 @@ export default function ProfilePage() {
       })
       const data = await res.json()
       if (res.ok) {
-        setTrackMsg({ org: _orgName, msg: `Now tracking ${key}`, ok: true })
+        await ensureFavoriteOrg(result.owner)
+        setTrackMsg({ org: _orgName, msg: `Added ${key} to favorites`, ok: true })
         setSearchResults(prev => prev.filter(r => `${r.owner}/${r.name}` !== key))
-        fetchTrackedRepos() // refresh the tracked list
+        fetchTrackedRepos() // refresh the favorites list
       } else {
-        setTrackMsg({ org: _orgName, msg: data.error || 'Failed to track repo', ok: false })
+        setTrackMsg({ org: _orgName, msg: data.error || 'Failed to add favorite', ok: false })
       }
     } catch (e) {
       setTrackMsg({ org: _orgName, msg: 'Network error', ok: false })
@@ -359,7 +403,7 @@ export default function ProfilePage() {
                     Organizations & Access
                   </label>
 
-                  {/* Top-level Track Repos panel — above org list */}
+                  {/* Top-level Favorite Repos panel — above org list */}
                   {(user.role === 'owner' || user.role === 'admin') && user.orgs && user.orgs.length > 0 && (
                     <div className={`mb-3 rounded-lg border overflow-hidden ${isDark ? 'border-[#30363d]' : 'border-gray-200'}`}>
                       {/* Header row */}
@@ -378,7 +422,7 @@ export default function ProfilePage() {
                       >
                         <div className="flex items-center gap-2">
                           <SettingsIcon sx={{ fontSize: 16 }} className={isDark ? 'text-blue-400' : 'text-blue-600'} />
-                          <span>Track Public Repositories</span>
+                          <span>Favorite Public Repositories</span>
                         </div>
                         {expandedOrg ? <KeyboardArrowUpIcon sx={{ fontSize: 18 }} /> : <KeyboardArrowDownIcon sx={{ fontSize: 18 }} />}
                       </button>
@@ -389,7 +433,7 @@ export default function ProfilePage() {
                           {/* Explanation */}
                           <p className={`text-xs ${mutedClass}`}>
                             The repo's native org is preserved — <code className="font-mono">curl/curl</code> releases group under <code className="font-mono">curl</code> in the dashboard.
-                            Any authenticated user can add a public repo. Removal is blocked while the repo is actively deployed to endpoints.
+                            Favoriting a public repo automatically keeps it watched and scanned behind the scenes. Removing a favorite only removes it from your list; removal may be blocked while the repo is actively deployed to endpoints.
                           </p>
 
                           {/* Ortelius org selector + provider toggle */}
@@ -458,7 +502,7 @@ export default function ProfilePage() {
                                       disabled={trackingRepo === `${r.owner}/${r.name}`}
                                       className="px-3 py-1 rounded bg-green-600 hover:bg-green-700 disabled:opacity-50 text-white text-xs font-medium transition-colors"
                                     >
-                                      {trackingRepo === `${r.owner}/${r.name}` ? '…' : '+ Track'}
+                                      {trackingRepo === `${r.owner}/${r.name}` ? '…' : 'Add to Favorites'}
                                     </button>
                                   </div>
                                 </div>
@@ -481,18 +525,18 @@ export default function ProfilePage() {
                             </div>
                           )}
 
-                          {/* Currently tracked repos */}
+                          {/* Favorite repos */}
                           <div>
                             <p className={`text-xs font-semibold uppercase tracking-wider mb-2 ${isDark ? 'text-[#8b949e]' : 'text-gray-500'}`}>
-                              Currently Tracked
+                              Favorites
                             </p>
                             {loadingTracked ? (
                               <p className={`text-xs ${mutedClass}`}>Loading…</p>
-                            ) : trackedRepos.length === 0 ? (
-                              <p className={`text-xs ${mutedClass}`}>No public repos tracked yet.</p>
+                            ) : favoriteTrackedRepos.length === 0 ? (
+                              <p className={`text-xs ${mutedClass}`}>No favorite public repos yet.</p>
                             ) : (
                               <div className={`rounded-md border divide-y max-h-48 overflow-y-auto ${isDark ? 'border-[#30363d] divide-[#30363d]' : 'border-gray-200 divide-gray-100'}`}>
-                                {trackedRepos.map((r, i) => (
+                                {favoriteTrackedRepos.map((r, i) => (
                                   <div key={i} className={`flex items-center justify-between px-3 py-2 text-sm ${isDark ? 'bg-[#161b22]' : 'bg-white'}`}>
                                     <div className="min-w-0">
                                       <span className={`font-semibold ${textClass}`}>{r.owner}/{r.name}</span>
@@ -506,14 +550,14 @@ export default function ProfilePage() {
                                     <button
                                       onClick={() => handleUntrackRepo(r)}
                                       disabled={untrackingKey === r.key}
-                                      title={r.active_sync_count > 0 ? `Deployed to ${r.active_sync_count} endpoint(s) — remove syncs first` : 'Stop tracking'}
+                                      title={r.active_sync_count > 0 ? `Deployed to ${r.active_sync_count} endpoint(s) — remove syncs first` : 'Remove from favorites'}
                                       className={`ml-3 shrink-0 text-xs px-2 py-1 rounded border transition-colors disabled:opacity-50 ${
                                         isDark
                                           ? 'border-red-800 text-red-400 hover:bg-red-900/30'
                                           : 'border-red-200 text-red-600 hover:bg-red-50'
                                       }`}
                                     >
-                                      {untrackingKey === r.key ? '…' : 'Untrack'}
+                                      {untrackingKey === r.key ? '…' : 'Remove'}
                                     </button>
                                   </div>
                                 ))}
@@ -663,7 +707,7 @@ export default function ProfilePage() {
                         </div>
                         <p className="opacity-90">
                           To grant Ortelius access to additional repositories, configure the installation on GitHub directly.
-                          To track public repos across any org, use <strong>Org Settings</strong> on your org card above.
+                          To add public repos to Favorites across any org, use <strong>Favorite Public Repositories</strong> on your org card above.
                         </p>
                         <a
                           href="https://github.com/settings/installations"

@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState } from 'react'
+import React, { useEffect, useState } from 'react'
 import { useSidebar } from '@/context/SidebarContext'
 import { useTheme } from '@/context/ThemeContext'
 import { useAuth } from '@/context/AuthContext'
@@ -16,6 +16,11 @@ import ExpandLessIcon from '@mui/icons-material/ExpandLess'
 import ManageAccountsIcon from '@mui/icons-material/ManageAccounts'
 import DownloadIcon from '@mui/icons-material/Download'
 
+const FILTER_STORAGE_VERSION = 1
+
+const getFilterStorageKey = (selectedCategory?: string) =>
+  `ortelius:sidebar-filters:${selectedCategory ?? 'default'}:v${FILTER_STORAGE_VERSION}`
+
 interface SidebarProps {
   filters?: {
     vulnerabilityScore: string[]
@@ -26,7 +31,7 @@ interface SidebarProps {
     endpointType?: string[]
     packageFilter?: string
     searchCVE?: string
-    orgVisibility?: string[]  // 'myOrgs' | 'public'
+    orgVisibility?: string[]  // 'myOrgs' | 'favorites' | 'public'
   }
   setFilters?: (filters: any) => void
   selectedCategory?: string
@@ -40,6 +45,37 @@ export default function Sidebar({ filters, setFilters, selectedCategory, isLogge
   const { hasRole } = useAuth()
   const { toggleExportMode } = useExport()
   const [isFiltersOpen, setIsFiltersOpen] = useState(true)
+  const storageKey = getFilterStorageKey(selectedCategory)
+
+  const persistFilters = (nextFilters: any) => {
+    if (typeof window === 'undefined') return
+
+    try {
+      window.localStorage.setItem(storageKey, JSON.stringify(nextFilters))
+    } catch (error) {
+      console.warn('[Sidebar] Unable to save filters:', error)
+    }
+  }
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    if (!filters || !setFilters || !selectedCategory) return
+
+    try {
+      const savedFilters = window.localStorage.getItem(storageKey)
+      if (!savedFilters) return
+
+      const parsedFilters = JSON.parse(savedFilters)
+      setFilters((prev: any) => ({
+        ...prev,
+        ...parsedFilters,
+      }))
+    } catch (error) {
+      console.warn('[Sidebar] Unable to load saved filters:', error)
+    }
+    // Run only when the page/category changes. Saving is handled directly in the change handlers.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [storageKey, selectedCategory])
 
   const isActive = (path: string) => {
     if (path === '/' && pathname !== '/') return false
@@ -95,6 +131,12 @@ export default function Sidebar({ filters, setFilters, selectedCategory, isLogge
   const showOpenSSFScoreFilter = selectedCategory === 'all'
   const showDetailFilters = isDetailView
   const showFilters = filters && setFilters && selectedCategory
+  const defaultOrgVisibility = isLoggedIn ? ['myOrgs', 'favorites', 'public'] : ['public']
+  const currentOrgVisibility = filters?.orgVisibility ?? defaultOrgVisibility
+  const hasOrgVisibilityFilterChanged = selectedCategory === 'orgs' && (
+    currentOrgVisibility.length !== defaultOrgVisibility.length ||
+    currentOrgVisibility.some(value => !defaultOrgVisibility.includes(value))
+  )
   
   const hasActiveFilters = filters && (
     ((filters.vulnerabilityScore?.length ?? 0) > 0) ||
@@ -103,8 +145,9 @@ export default function Sidebar({ filters, setFilters, selectedCategory, isLogge
     ((filters.status?.length ?? 0) > 0) ||
     ((filters.environment?.length ?? 0) > 0) ||
     ((filters.endpointType?.length ?? 0) > 0) ||
-    (filters.packageFilter !== '') ||
-    (filters.searchCVE !== '')
+    ((filters.packageFilter ?? '') !== '') ||
+    ((filters.searchCVE ?? '') !== '') ||
+    hasOrgVisibilityFilterChanged
   )
 
   const handleCheckboxChange = (category: string, value: string) => {
@@ -114,13 +157,26 @@ export default function Sidebar({ filters, setFilters, selectedCategory, isLogge
       const newValues = currentValues.includes(value)
         ? currentValues.filter((v: string) => v !== value)
         : [...currentValues, value]
-      return { ...prev, [category]: newValues }
+
+      const nextFilters = { ...prev, [category]: newValues }
+      persistFilters(nextFilters)
+      return nextFilters
+    })
+  }
+
+  const handleTextFilterChange = (category: string, value: string) => {
+    if (!setFilters) return
+    setFilters((prev: any) => {
+      const nextFilters = { ...prev, [category]: value }
+      persistFilters(nextFilters)
+      return nextFilters
     })
   }
 
   const clearFilters = () => {
     if (!setFilters) return
-    setFilters({
+
+    const clearedFilters = {
       vulnerabilityScore: [],
       openssfScore: [],
       name: '',
@@ -129,8 +185,11 @@ export default function Sidebar({ filters, setFilters, selectedCategory, isLogge
       endpointType: [],
       packageFilter: '',
       searchCVE: '',
-      orgVisibility: ['myOrgs', 'public'],
-    })
+      orgVisibility: defaultOrgVisibility,
+    }
+
+    persistFilters(clearedFilters)
+    setFilters(clearedFilters)
   }
 
   return (
@@ -199,17 +258,28 @@ export default function Sidebar({ filters, setFilters, selectedCategory, isLogge
                       <label className="flex items-center cursor-pointer group">
                         <input
                           type="checkbox"
-                          checked={filters?.orgVisibility?.includes('myOrgs') ?? true}
+                          checked={currentOrgVisibility.includes('myOrgs')}
                           onChange={() => handleCheckboxChange('orgVisibility', 'myOrgs')}
                           className={checkboxClasses}
                         />
                         <span className="ml-2 text-xs text-gray-700 dark:text-[#c9d1d9] group-hover:text-gray-900 dark:group-hover:text-[#e6edf3]">My Orgs</span>
                       </label>
                     )}
+                    {isLoggedIn && (
+                      <label className="flex items-center cursor-pointer group">
+                        <input
+                          type="checkbox"
+                          checked={currentOrgVisibility.includes('favorites')}
+                          onChange={() => handleCheckboxChange('orgVisibility', 'favorites')}
+                          className={checkboxClasses}
+                        />
+                        <span className="ml-2 text-xs text-gray-700 dark:text-[#c9d1d9] group-hover:text-gray-900 dark:group-hover:text-[#e6edf3]">Favorites</span>
+                      </label>
+                    )}
                     <label className="flex items-center cursor-pointer group">
                       <input
                         type="checkbox"
-                        checked={filters?.orgVisibility?.includes('public') ?? true}
+                        checked={currentOrgVisibility.includes('public')}
                         onChange={() => handleCheckboxChange('orgVisibility', 'public')}
                         className={checkboxClasses}
                       />
@@ -224,7 +294,7 @@ export default function Sidebar({ filters, setFilters, selectedCategory, isLogge
                   <input
                     type="text"
                     value={filters.name}
-                    onChange={(e) => setFilters && setFilters((prev: any) => ({ ...prev, name: e.target.value }))}
+                    onChange={(e) => handleTextFilterChange('name', e.target.value)}
                     placeholder="Filter by name..."
                     className={inputClasses}
                   />
@@ -310,7 +380,7 @@ export default function Sidebar({ filters, setFilters, selectedCategory, isLogge
                     <input
                       type="text"
                       value={filters.packageFilter || ''}
-                      onChange={(e) => setFilters && setFilters((prev: any) => ({ ...prev, packageFilter: e.target.value }))}
+                      onChange={(e) => handleTextFilterChange('packageFilter', e.target.value)}
                       placeholder="Filter by package..."
                       className={inputClasses}
                     />
@@ -320,7 +390,7 @@ export default function Sidebar({ filters, setFilters, selectedCategory, isLogge
                     <input
                       type="text"
                       value={filters.searchCVE || ''}
-                      onChange={(e) => setFilters && setFilters((prev: any) => ({ ...prev, searchCVE: e.target.value }))}
+                      onChange={(e) => handleTextFilterChange('searchCVE', e.target.value)}
                       placeholder="Filter by CVE ID..."
                       className={inputClasses}
                     />

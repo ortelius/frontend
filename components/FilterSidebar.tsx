@@ -1,5 +1,12 @@
 'use client'
 
+import { useEffect } from 'react'
+
+const FILTER_STORAGE_VERSION = 1
+
+const getFilterStorageKey = (selectedCategory: string) =>
+  `ortelius:filters:${selectedCategory}:v${FILTER_STORAGE_VERSION}`
+
 interface FilterSidebarProps {
   filters: {
     vulnerabilityScore: string[]
@@ -16,6 +23,52 @@ interface FilterSidebarProps {
 }
 
 export default function FilterSidebar({ filters, setFilters, selectedCategory, isLoggedIn }: FilterSidebarProps) {
+  const storageKey = getFilterStorageKey(selectedCategory)
+
+  const persistFilters = (nextFilters: any) => {
+    if (typeof window === 'undefined') return
+
+    try {
+      window.localStorage.setItem(storageKey, JSON.stringify(nextFilters))
+      console.debug('[FilterSidebar] Saved filters to localStorage', {
+        storageKey,
+        filters: nextFilters,
+      })
+    } catch (error) {
+      console.warn('Unable to save filters:', error)
+    }
+  }
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+
+    try {
+      const savedFilters = window.localStorage.getItem(storageKey)
+
+      console.debug('[FilterSidebar] Loading filters from localStorage', {
+        storageKey,
+        found: Boolean(savedFilters),
+        rawValue: savedFilters,
+      })
+
+      if (!savedFilters) return
+
+      const parsedFilters = JSON.parse(savedFilters)
+      console.debug('[FilterSidebar] Loaded filters from localStorage', {
+        storageKey,
+        filters: parsedFilters,
+      })
+      setFilters((prev: any) => ({
+        ...prev,
+        ...parsedFilters,
+      }))
+    } catch (error) {
+      console.warn('Unable to load saved filters:', error)
+    }
+    // Run only when the page/category changes. Saving is handled directly in the change handlers.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [storageKey])
+
   const handleCheckboxChange = (category: 'vulnerabilityScore' | 'openssfScore' | 'status' | 'environment' | 'endpointType' | 'orgVisibility', value: string) => {
     setFilters((prev: any) => {
       const currentValues = prev[category] || []
@@ -23,22 +76,30 @@ export default function FilterSidebar({ filters, setFilters, selectedCategory, i
         ? currentValues.filter((v: string) => v !== value)
         : [...currentValues, value]
 
-      return {
+      const nextFilters = {
         ...prev,
         [category]: newValues,
       }
+
+      persistFilters(nextFilters)
+      return nextFilters
     })
   }
 
   const handleNameChange = (value: string) => {
-    setFilters((prev: any) => ({
-      ...prev,
-      name: value,
-    }))
+    setFilters((prev: any) => {
+      const nextFilters = {
+        ...prev,
+        name: value,
+      }
+
+      persistFilters(nextFilters)
+      return nextFilters
+    })
   }
 
   const clearFilters = () => {
-    setFilters({
+    const clearedFilters = {
       vulnerabilityScore: [],
       openssfScore: [],
       name: '',
@@ -46,7 +107,10 @@ export default function FilterSidebar({ filters, setFilters, selectedCategory, i
       environment: [],
       endpointType: [],
       orgVisibility: ['myOrgs', 'public'],
-    })
+    }
+
+    persistFilters(clearedFilters)
+    setFilters(clearedFilters)
   }
 
   const hasActiveFilters = 

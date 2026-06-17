@@ -210,15 +210,15 @@ export default function TopNavigation() {
                   key={item.path}
                   className={`
                     flex items-center gap-2 px-4 h-full text-sm font-medium border-b-2 whitespace-nowrap
-                    border-transparent text-gray-400 dark:text-gray-700 cursor-not-allowed opacity-50
+                    border-transparent text-gray-400 dark:text-gray-700 cursor-not-allowed
                   `}
                   title="Select an organization to enable"
                 >
-                  <Icon sx={{ fontSize: 18 }} />
+                  <Icon sx={{ fontSize: 20 }} />
                   <div className="flex flex-col items-start leading-tight">
-                    <span>{item.label}</span>
+                    <span className="font-semibold">{item.label}</span>
                     {item.tagline && (
-                      <span className="text-[10px] font-normal opacity-60">
+                      <span className="mt-0.5 text-[11px] font-semibold tracking-wide text-gray-500 dark:text-gray-500">
                         {item.tagline}
                       </span>
                     )}
@@ -229,18 +229,18 @@ export default function TopNavigation() {
                   key={item.path}
                   href={item.path}
                   className={`
-                    flex items-center gap-2 px-4 h-full text-sm font-medium border-b-2 transition-colors whitespace-nowrap
+                    group flex items-center gap-2 px-4 h-full text-sm font-medium border-b-2 transition-colors whitespace-nowrap
                     ${active 
                       ? 'border-blue-600 dark:border-[#58a6ff] text-gray-900 dark:text-[#e6edf3]' 
                       : 'border-transparent text-gray-600 dark:text-[#7d8590] hover:text-gray-900 dark:hover:text-[#e6edf3] hover:border-gray-300 dark:hover:border-[#30363d]'
                     }
                   `}
                 >
-                  <Icon sx={{ fontSize: 18 }} />
+                  <Icon sx={{ fontSize: 20 }} />
                   <div className="flex flex-col items-start leading-tight">
-                    <span>{item.label}</span>
+                    <span className="font-semibold">{item.label}</span>
                     {item.tagline && (
-                      <span className="text-[10px] font-normal opacity-60">
+                      <span className="mt-0.5 text-[11px] font-semibold tracking-wide text-gray-500 dark:text-gray-500">
                         {item.tagline}
                       </span>
                     )}
