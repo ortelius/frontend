@@ -491,7 +491,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     const pdf = await buildPDF(data)
     const filename = `${(data.endpoint_name ?? 'endpoint').replace(/[^a-z0-9_-]/gi, '_')}-sbom-${new Date().toISOString().split('T')[0]}.pdf`
 
-    return new NextResponse(pdf, {
+    return new NextResponse(new Uint8Array(pdf), {
       status: 200,
       headers: {
         'Content-Type': 'application/pdf',
