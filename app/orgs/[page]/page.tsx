@@ -22,7 +22,7 @@ import ArrowBackIcon from '@mui/icons-material/ArrowBack'
 import KeyIcon from '@mui/icons-material/Key'
 import StorageIcon from '@mui/icons-material/Storage'
 
-interface TrackedRepo {
+interface WatchedRepo {
   provider: string
   owner: string
   name: string
@@ -40,7 +40,7 @@ interface OrgStatus {
   gitlab_pat_present: boolean
   token_status: string
   token_last_validated: string | null
-  tracked_repos: TrackedRepo[]
+  tracked_repos: WatchedRepo[]
   hidden_repos: string[]
 }
 
@@ -90,7 +90,7 @@ export default function OrgSettingsPage() {
   const [searching, setSearching] = useState(false)
   const [searchError, setSearchError] = useState('')
 
-  // Track/hide actions
+  // Watch/hide actions
   const [actionLoading, setActionLoading] = useState<string | null>(null)
   const [actionMessage, setActionMessage] = useState('')
 
@@ -177,7 +177,7 @@ export default function OrgSettingsPage() {
     }
   }
 
-  const handleTrackRepo = async (repo: SearchResult) => {
+  const handleWatchRepo = async (repo: SearchResult) => {
     const key = `${repo.provider}/${repo.owner}/${repo.name}`
     setActionLoading(key)
     setActionMessage('')
@@ -195,8 +195,8 @@ export default function OrgSettingsPage() {
         }),
       })
       const data = await res.json()
-      if (!res.ok) throw new Error(data.error || 'Failed to track repo')
-      setActionMessage(`✅ Now tracking ${repo.full_name}`)
+      if (!res.ok) throw new Error(data.error || 'Failed to watch repo')
+      setActionMessage(`✅ Now watching ${repo.full_name}`)
       fetchOrgStatus()
     } catch (err: any) {
       setActionMessage(`❌ ${err.message}`)
@@ -205,7 +205,7 @@ export default function OrgSettingsPage() {
     }
   }
 
-  const handleHideRepo = async (repo: TrackedRepo) => {
+  const handleHideRepo = async (repo: WatchedRepo) => {
     const key = `hide:${repo.provider}/${repo.owner}/${repo.name}`
     setActionLoading(key)
     try {
@@ -227,7 +227,7 @@ export default function OrgSettingsPage() {
     }
   }
 
-  const isRepoTracked = (result: SearchResult) =>
+  const isRepoWatched = (result: SearchResult) =>
     orgStatus?.tracked_repos.some(
       r => r.provider === result.provider && r.owner === result.owner && r.name === result.name
     ) ?? false
@@ -348,7 +348,7 @@ export default function OrgSettingsPage() {
               </div>
             )}
 
-            {/* PAT Management — shown when app not connected or for GitLab */}
+            {/* PAT Management */}
             {isOwner && (
               <div className="mt-4 space-y-4">
                 <h3 className="text-sm font-semibold" style={{ color: textPrimary }}>Personal Access Tokens (private repos)</h3>
@@ -440,11 +440,11 @@ export default function OrgSettingsPage() {
             )}
           </div>
 
-          {/* ── Repo Search & Track ── */}
+          {/* ── Repo Search & Watch ── */}
           <div className="p-6 rounded-xl border shadow-sm" style={card}>
-            <h2 className="text-lg font-semibold mb-1" style={{ color: textPrimary }}>Track Public Repositories</h2>
+            <h2 className="text-lg font-semibold mb-1" style={{ color: textPrimary }}>Watch Public Repositories</h2>
             <p className="text-sm mb-4" style={{ color: textSecondary }}>
-              Search for public repos to scan. Private repos require credentials configured above.
+              Search for a repo you deploy — e.g. <strong>nginx</strong>, <strong>curl</strong>, <strong>redis</strong>. Private repos require credentials configured above.
             </p>
 
             <form onSubmit={handleSearch} className="flex gap-3 items-end flex-wrap mb-4">
@@ -466,7 +466,7 @@ export default function OrgSettingsPage() {
                   type="text"
                   value={searchQuery}
                   onChange={e => setSearchQuery(e.target.value)}
-                  placeholder="e.g. kubernetes, ortelius, cncf/landscape"
+                  placeholder="e.g. nginx, curl/curl, grafana/grafana"
                   style={inputStyle}
                   className="w-full px-3 py-2 border rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
@@ -486,7 +486,7 @@ export default function OrgSettingsPage() {
             {searchResults.length > 0 && (
               <div className="space-y-2 max-h-80 overflow-y-auto">
                 {searchResults.map(result => {
-                  const tracked = isRepoTracked(result)
+                  const watched = isRepoWatched(result)
                   const loadKey = `${result.provider}/${result.owner}/${result.name}`
                   return (
                     <div
@@ -519,20 +519,20 @@ export default function OrgSettingsPage() {
                       </div>
                       {isOwner && (
                         <button
-                          onClick={() => handleTrackRepo(result)}
-                          disabled={tracked || actionLoading === loadKey}
+                          onClick={() => handleWatchRepo(result)}
+                          disabled={watched || actionLoading === loadKey}
                           className={`flex-shrink-0 flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
-                            tracked
+                            watched
                               ? 'bg-green-100 dark:bg-green-900/20 text-green-700 dark:text-green-400 cursor-default'
                               : 'bg-blue-600 hover:bg-blue-700 text-white disabled:opacity-50'
                           }`}
                         >
-                          {tracked ? (
-                            <><CheckCircleIcon sx={{ fontSize: 14 }} /> Tracking</>
+                          {watched ? (
+                            <><CheckCircleIcon sx={{ fontSize: 14 }} /> Watching</>
                           ) : actionLoading === loadKey ? (
                             'Adding...'
                           ) : (
-                            <><AddIcon sx={{ fontSize: 14 }} /> Add</>
+                            <><AddIcon sx={{ fontSize: 14 }} /> Watch</>
                           )}
                         </button>
                       )}
@@ -547,19 +547,18 @@ export default function OrgSettingsPage() {
             )}
           </div>
 
-          {/* ── Tracked Repos ── */}
+          {/* ── Watched Repos ── */}
           <div className="p-6 rounded-xl border shadow-sm" style={card}>
             <h2 className="text-lg font-semibold mb-1" style={{ color: textPrimary }}>
-              Tracked Repositories ({orgStatus?.tracked_repos.length ?? 0})
+              Watched Repositories ({orgStatus?.tracked_repos.length ?? 0})
             </h2>
             <p className="text-sm mb-4" style={{ color: textSecondary }}>
-              These repos are scanned by the relscanner. Remove a repo from the RBAC YAML to stop scanning it.
-              "Hide" removes it from your view but keeps scanning.
+              These repos are scanned for CVEs automatically. "Hide" removes a repo from your view but keeps it scanning.
             </p>
 
             {!orgStatus?.tracked_repos.length ? (
               <div className="text-center py-8 border border-dashed rounded-lg" style={{ borderColor: isDark ? '#30363d' : '#d1d5db' }}>
-                <p className="text-sm" style={{ color: textSecondary }}>No repos tracked yet. Search above to add some.</p>
+                <p className="text-sm" style={{ color: textSecondary }}>No repos watched yet. Search above to add some.</p>
               </div>
             ) : (
               <div className="space-y-2">
@@ -619,7 +618,7 @@ export default function OrgSettingsPage() {
                   <div key={key} className="flex items-center justify-between px-3 py-2 rounded-lg text-sm" style={{ backgroundColor: isDark ? '#0d1117' : '#f9fafb' }}>
                     <span style={{ color: textSecondary }}>{key}</span>
                     <span className="text-xs" style={{ color: textSecondary }}>
-                      Use "Add Repo" to make visible again
+                      Search for it above to watch again
                     </span>
                   </div>
                 ))}

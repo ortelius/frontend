@@ -8,6 +8,8 @@
  * Add to package.json:  "pdfkit": "^0.15.x"
  */
 import { NextRequest, NextResponse } from 'next/server'
+import fs from 'fs'
+import path from 'path'
 // @ts-ignore – pdfkit ships its own types via @types/pdfkit
 import PDFDocument from 'pdfkit'
 
@@ -44,14 +46,14 @@ const MARGIN = 18
 
 // Column definitions for Severity Tables (must sum to ≤ PAGE_W − 2*MARGIN = 756)
 const COLS = [
-  { label: 'Release',     w: 125 }, // Expanded
-  { label: 'Version',     w: 110 }, // <-- Expanded heavily to fit long versions
-  { label: 'Package',     w: 155 }, // Expanded
+  { label: 'Release',     w: 125 }, 
+  { label: 'Version',     w: 110 }, 
+  { label: 'Package',     w: 155 }, 
   { label: 'Pkg Version', w:  75 },
-  { label: 'CVE',         w: 145 }, // Expanded
+  { label: 'CVE',         w: 145 }, 
   { label: 'Severity',    w:  60 },
   { label: 'Score',       w:  36 },
-  { label: 'Fixed In',    w:  50 }, // <-- Shrunk to give space to Version/CVE
+  { label: 'Fixed In',    w:  50 }, 
 ]
 
 // ── Contextual Severity Palette Themes ────────────────────────────────────────
@@ -112,13 +114,13 @@ function drawDataRow(doc: InstanceType<typeof PDFDocument>, row: FullRow, y: num
 
   const cells: string[] = [
     trunc(row.release_name, 22),
-    trunc(row.release_version, 24),    // <-- Increased from 12 to 24 characters!
+    trunc(row.release_version, 24),
     trunc(pkgShort(row.package), 28), 
     trunc(row.affected_version, 12),
-    trunc(row.cve_id, 28),             // <-- Increased for CVEs
+    trunc(row.cve_id, 28),             
     (row.severity_rating ?? '').toUpperCase(),
     row.severity_score ? row.severity_score.toFixed(1) : '—',
-    trunc((row.fixed_in ?? []).join(', ') || '—', 8), // <-- Now truncates Fixed In at 8 chars
+    trunc((row.fixed_in ?? []).join(', ') || '—', 8), 
   ]
 
   for (let i = 0; i < COLS.length; i++) {
@@ -131,7 +133,6 @@ function drawDataRow(doc: InstanceType<typeof PDFDocument>, row: FullRow, y: num
     }
 
     if (i === 4 && row.cve_id && row.cve_id !== '—') {
-      // CVE as clickable blue link
       textOpts.link = `https://osv.dev/vulnerability/${row.cve_id}`
       doc.font('Helvetica').fontSize(7).fillColor('#2563EB')
          .text(cells[i], x + 3, y + 6, textOpts)
@@ -155,6 +156,97 @@ function maybeNewPage(doc: InstanceType<typeof PDFDocument>, y: number, needed: 
   return y
 }
 
+// ── Custom Title Page ─────────────────────────────────────────────────────────
+
+function drawTitlePage(doc: InstanceType<typeof PDFDocument>, data: EndpointPDFData) {
+  const cLightGray = '#C8C9CA'
+  const cDarkGray = '#4C4F51'
+  const cOrange = '#F39C12'
+
+  // --- Left Geometric Shapes ---
+  
+  // 1. Light Gray Polygon (Top Left)
+  doc.polygon([0, 0], [310, 0], [200, 290], [0, 290])
+  doc.fill(cLightGray)
+
+  // 2. Dark Gray Diagonal Stripe (Middle Left)
+  doc.polygon([310, 0], [420, 0], [300, 290], [200, 290])
+  doc.fill(cDarkGray)
+
+  // 3. Orange Polygon (Bottom Left)
+  doc.polygon([0, 290], [200, 290], [360, 600], [0, 600])
+  doc.fill(cOrange)
+
+  // 4. Dark Gray Diagonal Stripe (Bottom Left)
+  doc.polygon([200, 290], [240, 290], [390, 600], [360, 600])
+  doc.fill(cDarkGray)
+
+  // --- Bottom Edge Ribbon ---
+  doc.rect(0, 600, PAGE_W, 12).fill(cDarkGray)
+
+  // --- Top Right Geometric Shapes ---
+
+  // 1. Dark Gray Logo Block
+  doc.polygon([580, 0], [PAGE_W, 0], [PAGE_W, 110], [610, 110])
+  doc.fill(cDarkGray)
+
+  // 2. Orange Accent Line
+  doc.polygon([610, 110], [PAGE_W, 110], [PAGE_W, 120], [620, 120])
+  doc.fill(cOrange)
+
+  // --- Bottom Right Geometric Ribbon ---
+
+  // 1. Dark Gray Ribbon
+  doc.polygon([550, 540], [PAGE_W, 540], [PAGE_W, 570], [565, 570])
+  doc.fill(cDarkGray)
+
+  // 2. Tiny Orange Accent Tab
+  doc.polygon([545, 540], [550, 540], [565, 570], [560, 570])
+  doc.fill(cOrange)
+
+  // --- Logo Image ---
+  try {
+    const logoPath = path.join(process.cwd(), 'public', 'pdf-logo.png')
+    if (fs.existsSync(logoPath)) {
+      doc.image(logoPath, 670, 15, { width: 80 })
+    }
+  } catch (e) {
+    console.warn('Could not load pdf-logo.png for PDF title page:', e)
+  }
+
+  // --- Typography ---
+
+  // Large Right-Aligned Title
+  const titleX = 350
+  let titleY = 220
+  
+  doc.font('Helvetica-Bold').fontSize(54)
+  doc.fillColor(cDarkGray).text('SBOM', titleX, titleY, { width: 400, align: 'right' })
+  titleY += 58
+  doc.text('WORKING', titleX, titleY, { width: 400, align: 'right' })
+  titleY += 58
+  doc.fillColor(cOrange).text('REPORT', titleX, titleY, { width: 400, align: 'right' })
+
+  // Endpoint Details (Bottom Left on Orange)
+  doc.font('Helvetica-Bold').fontSize(11).fillColor('#FFFFFF')
+  doc.text(`Environment`, 20, 520)
+  doc.font('Helvetica').text(`${data.environment || 'N/A'}`, 20, 533)
+  
+  doc.font('Helvetica-Bold').text(`Endpoint`, 20, 555)
+  doc.font('Helvetica').text(`${data.endpoint_name || 'N/A'}`, 20, 568)
+
+  // Generated Date (Bottom Right on Ribbon)
+  const now = new Date()
+  const formattedDate = now.toLocaleDateString('en-US', {
+    month: 'long', day: '2-digit', year: 'numeric'
+  }) + ' at ' + now.toLocaleTimeString('en-US', {
+    hour: '2-digit', minute: '2-digit', timeZoneName: 'short'
+  })
+
+  doc.font('Helvetica').fontSize(9).fillColor('#FFFFFF')
+  doc.text(formattedDate, 570, 550, { width: 210, align: 'center' })
+}
+
 // ── PDF builder ───────────────────────────────────────────────────────────────
 
 function buildPDF(data: EndpointPDFData): Promise<Buffer> {
@@ -175,9 +267,24 @@ function buildPDF(data: EndpointPDFData): Promise<Buffer> {
     doc.on('end', () => resolve(Buffer.concat(chunks)))
     doc.on('error', reject)
 
+    // 1. Draw the Custom Title Page
+    drawTitlePage(doc, data)
+
+    // 2. Add a fresh page for the main report content
+    doc.addPage({ size: [PAGE_W, PAGE_H] })
     let y = MARGIN
 
-    // ── Title ──────────────────────────────────────────────────────────────
+    // ── Document Sub-Title / Header ─────────────────────────────────────────
+    try {
+      const logoPath = path.join(process.cwd(), 'public', 'pdf-logo.png')
+      if (fs.existsSync(logoPath)) {
+        doc.image(logoPath, MARGIN, y, { width: 50 })
+        y += 60 
+      }
+    } catch (e) {
+      console.warn('Could not load pdf-logo.png for PDF header:', e)
+    }
+
     doc.font('Helvetica-Bold').fontSize(16).fillColor('#000000')
        .text('Federated Component Evidence Details', MARGIN, y)
     y += 22
@@ -254,7 +361,7 @@ function buildPDF(data: EndpointPDFData): Promise<Buffer> {
     y = maybeNewPage(doc, y, HDR_H)
     let rx = MARGIN
     for (const col of relCols) {
-      doc.rect(rx, y, col.w, HDR_H).fillAndStroke('#4B5563', '#374151') // Professional dark neutral gray
+      doc.rect(rx, y, col.w, HDR_H).fillAndStroke('#4B5563', '#374151') 
       doc.font('Helvetica-Bold').fontSize(8).fillColor('#FFFFFF')
          .text(col.label, rx + 4, y + 6, { width: col.w - 8, height: HDR_H - 6, ellipsis: true })
       rx += col.w
@@ -267,7 +374,6 @@ function buildPDF(data: EndpointPDFData): Promise<Buffer> {
       y = maybeNewPage(doc, y, ROW_H)
       
       if (y === MARGIN) {
-        // Repeat table header if wrapping to a new page
         let rxx = MARGIN
         for (const col of relCols) {
           doc.rect(rxx, y, col.w, HDR_H).fillAndStroke('#4B5563', '#374151')
@@ -281,26 +387,23 @@ function buildPDF(data: EndpointPDFData): Promise<Buffer> {
       const bg = i % 2 === 0 ? '#F9FAFB' : '#F3F4F6'
       let rxx = MARGIN
 
-      // Column 1: Release Name
       doc.rect(rxx, y, relCols[0].w, ROW_H).fillAndStroke(bg, '#E5E7EB')
       doc.font('Helvetica').fontSize(8).fillColor('#1F2937')
          .text(trunc(rel.release_name, 45), rxx + 4, y + 6, { width: relCols[0].w - 8, height: ROW_H - 6, ellipsis: true })
       rxx += relCols[0].w
 
-      // Column 2: Version
       doc.rect(rxx, y, relCols[1].w, ROW_H).fillAndStroke(bg, '#E5E7EB')
       doc.font('Helvetica').fontSize(8).fillColor('#1F2937')
          .text(trunc(rel.release_version, 35), rxx + 4, y + 6, { width: relCols[1].w - 8, height: ROW_H - 6, ellipsis: true })
       rxx += relCols[1].w
 
-      // Column 3: CVE Count
       doc.rect(rxx, y, relCols[2].w, ROW_H).fillAndStroke(bg, '#E5E7EB')
       doc.font('Helvetica').fontSize(8).fillColor('#1F2937')
          .text(String(rel.vulnerabilities?.length || 0), rxx + 4, y + 6, { width: relCols[2].w - 8, height: ROW_H - 6, ellipsis: true })
 
       y += ROW_H
     }
-    y += 20 // Padding space before transitioning into risk sections
+    y += 20
 
     // ── Per-Severity Sections ──────────────────────────────────────────────
     const SECTIONS = [
@@ -325,12 +428,10 @@ function buildPDF(data: EndpointPDFData): Promise<Buffer> {
         }
       }
 
-      // Calculate space to prevent orphaned headings
       const spaceNeeded = matchingRows.length === 0 
           ? 35 + 18 
           : 35 + HDR_H + ROW_H
 
-      // Draw Section Heading
       y = maybeNewPage(doc, y, spaceNeeded)
       doc.font('Helvetica-Bold').fontSize(12).fillColor('#000000')
          .text(sec.label, MARGIN, y)
@@ -343,7 +444,6 @@ function buildPDF(data: EndpointPDFData): Promise<Buffer> {
         continue
       }
 
-      // ── RIGOROUS THREE-TIER ROW SORTING ────────────────────────────────────
       matchingRows.sort((a, b) => {
         const scoreA = Number(a.severity_score) || 0
         const scoreB = Number(b.severity_score) || 0
@@ -357,11 +457,9 @@ function buildPDF(data: EndpointPDFData): Promise<Buffer> {
         return String(a.release_name ?? '').localeCompare(String(b.release_name ?? ''))
       })
 
-      // Draw Table Header
       y = maybeNewPage(doc, y, HDR_H)
       y = drawTableHeader(doc, y, sec.key)
 
-      // Loop and Stream Rows into unified table structure
       for (let i = 0; i < matchingRows.length; i++) {
         y = maybeNewPage(doc, y, ROW_H)
         if (y === MARGIN) {

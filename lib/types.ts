@@ -269,6 +269,12 @@ export interface ImageData {
 
 // --- Org Aggregation Types ---
 
+/** Per-type endpoint count for org card badges, e.g. { label: "kubernetes", count: 12 } */
+export interface EndpointTypeCount {
+  label: string
+  count: number
+}
+
 export interface OrgAggregatedRelease {
   org_name: string
   total_releases: number
@@ -284,6 +290,8 @@ export interface OrgAggregatedRelease {
   synced_endpoint_count: number
   vulnerability_count_delta?: number | null
   pending_scan?: boolean
+  /** Real per-type endpoint breakdown supplied by the backend */
+  endpoint_type_counts?: EndpointTypeCount[]
 }
 
 export interface GetOrgAggregatedReleasesResponse {
