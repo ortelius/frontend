@@ -78,6 +78,10 @@ export default function VulnerabilitiesPage() {
     setFilteredVulnerabilities(filtered)
   }, [filters, vulnerabilities])
 
+  // "No matches for an active filter" needs a different nudge than
+  // "there's truly nothing tracked yet" — the latter points at Favorites.
+  const isFiltered = filters.vulnerabilityScore.length > 0 || filters.name !== ''
+
   const getSeverityColor = (rating: string) => {
     switch (rating.toLowerCase()) {
       case 'critical':
@@ -148,8 +152,14 @@ export default function VulnerabilitiesPage() {
         
         {filteredVulnerabilities.length === 0 ? (
           <div className="text-center py-12 border rounded-lg bg-gray-50">
-            <h3 className="text-sm font-medium text-gray-900">No vulnerabilities found</h3>
-            <p className="text-xs text-gray-500 mt-1">Try adjusting your filters</p>
+            <h3 className="text-sm font-medium text-gray-900">
+              {isFiltered ? 'No vulnerabilities match your filters' : 'No vulnerabilities yet'}
+            </h3>
+            <p className="text-xs text-gray-500 mt-1">
+              {isFiltered
+                ? 'Try a different search term or clearing a filter.'
+                : 'Favorite a repo from your profile to start tracking its CVEs.'}
+            </p>
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">

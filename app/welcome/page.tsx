@@ -9,8 +9,6 @@ import CheckCircleIcon from '@mui/icons-material/CheckCircle'
 import SearchIcon from '@mui/icons-material/Search'
 import ArrowForwardIcon from '@mui/icons-material/ArrowForward'
 import GitHubIcon from '@mui/icons-material/GitHub'
-import StarIcon from '@mui/icons-material/Star'
-import StarBorderIcon from '@mui/icons-material/StarBorder'
 
 interface TrackedRepo {
   key: string
@@ -24,14 +22,8 @@ export default function WelcomePage() {
   const { user } = useAuth()
   const { isDark } = useTheme()
 
-  // Platform-wide tracked repos (system_tracked_repos) — NOT per-user.
   const [trackedRepos, setTrackedRepos] = useState<TrackedRepo[]>([])
   const [loadingRepos, setLoadingRepos] = useState(true)
-
-  // This user's personal org favorites (model.User.FavoriteOrgs via GraphQL).
-  const [favoriteOrgs, setFavoriteOrgs] = useState<string[]>([])
-  const [loadingFavorites, setLoadingFavorites] = useState(true)
-  const [togglingOrg, setTogglingOrg] = useState<string | null>(null)
 
   const [repoQuery, setRepoQuery] = useState('')
   const [repoProvider, setRepoProvider] = useState<'github' | 'gitlab'>('github')
@@ -50,22 +42,6 @@ export default function WelcomePage() {
     return cfg.restEndpoint || 'http://localhost:3000/api/v1'
   }
 
-  const graphqlFetch = async (query: string, variables?: Record<string, unknown>) => {
-    const endpoint = await getEndpoint()
-    const res = await fetch(`${endpoint}/graphql`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      credentials: 'include',
-      body: JSON.stringify({ query, variables }),
-    })
-    const json = await res.json()
-    if (json.errors?.length) throw new Error(json.errors[0].message)
-    return json.data
-  }
-
-  // GET /tracked-repos — the platform-wide system_tracked_repos list.
-  // This is the same data the Organizations page "pending scan" badges read
-  // from. It's global, not scoped to this user, so we frame it that way.
   const fetchTrackedRepos = async () => {
     setLoadingRepos(true)
     try {
@@ -76,47 +52,15 @@ export default function WelcomePage() {
         setTrackedRepos(data.repos ?? [])
       }
     } catch (e) {
-      console.error('Failed to fetch tracked repos', e)
+      console.error('Failed to fetch favorites', e)
     } finally {
       setLoadingRepos(false)
     }
   }
 
-  // myFavoriteOrgs — this user's personal bookmark list. Zero relationship
-  // to system_tracked_repos; toggling these never starts or stops scanning.
-  const fetchFavoriteOrgs = async () => {
-    setLoadingFavorites(true)
-    try {
-      const data = await graphqlFetch(`query { myFavoriteOrgs }`)
-      setFavoriteOrgs(data?.myFavoriteOrgs ?? [])
-    } catch (e) {
-      console.error('Failed to fetch favorite orgs', e)
-    } finally {
-      setLoadingFavorites(false)
-    }
-  }
-
   useEffect(() => {
-    if (user) {
-      fetchTrackedRepos()
-      fetchFavoriteOrgs()
-    }
+    if (user) fetchTrackedRepos()
   }, [user])
-
-  const toggleFavoriteOrg = async (orgName: string) => {
-    setTogglingOrg(orgName)
-    try {
-      const data = await graphqlFetch(
-        `mutation($orgName: String!) { toggleFavoriteOrg(orgName: $orgName) }`,
-        { orgName }
-      )
-      setFavoriteOrgs(data?.toggleFavoriteOrg ?? [])
-    } catch (e) {
-      console.error('Failed to toggle favorite org', e)
-    } finally {
-      setTogglingOrg(null)
-    }
-  }
 
   const searchRepos = async () => {
     if (!repoQuery.trim()) return
@@ -140,10 +84,7 @@ export default function WelcomePage() {
     }
   }
 
-  // Adds to system_tracked_repos — a PLATFORM-WIDE action. This is
-  // deliberately not called "favorite": it starts scanning the repo for
-  // every user on Ortelius, not just this one. Copy below says so plainly.
-  const handleTrackRepo = async (result: any) => {
+  const handleAddFavorite = async (result: any) => {
     const key = `${result.owner}/${result.name}`
     setTrackingKey(key)
     setSearchMsg(null)
@@ -161,11 +102,11 @@ export default function WelcomePage() {
       })
       const data = await res.json()
       if (res.ok) {
-        setSearchMsg({ msg: `Now tracking ${key} platform-wide — it'll start appearing for everyone on Ortelius.`, ok: true })
+        setSearchMsg({ msg: `Added ${key} to Favorites`, ok: true })
         setSearchResults(prev => prev.filter(r => `${r.owner}/${r.name}` !== key))
         fetchTrackedRepos()
       } else {
-        setSearchMsg({ msg: data.error || 'Failed to track repo', ok: false })
+        setSearchMsg({ msg: data.error || 'Failed to add favorite', ok: false })
       }
     } catch (e) {
       setSearchMsg({ msg: 'Network error', ok: false })
@@ -190,10 +131,6 @@ export default function WelcomePage() {
     color: isDark ? '#e6edf3' : '#111827',
   }
 
-  // First few platform-tracked repos, used both as "look, real data" proof
-  // in Step 1 and as quick-star candidates in Step 2.
-  const previewRepos = trackedRepos.slice(0, 6)
-
   return (
     <div className={`flex-1 overflow-y-auto ${pageBg}`}>
       <div className="max-w-3xl mx-auto px-6 py-12 space-y-8">
@@ -206,95 +143,44 @@ export default function WelcomePage() {
           </p>
         </div>
 
-        {/* Step 1 — real data already exists platform-wide (system_tracked_repos),
-            NOT personal favorites. New users have an empty FavoriteOrgs list;
-            claiming otherwise here would be inaccurate. */}
+        {/* Step 1 — default favorites already added */}
         <div className="p-6 rounded-xl border shadow-sm" style={cardStyle}>
           <div className="flex items-center gap-2 mb-1">
             <CheckCircleIcon sx={{ fontSize: 20 }} className="text-green-600" />
-            <h2 className={`text-lg font-semibold ${headingClass}`}>Real data, zero setup</h2>
+            <h2 className={`text-lg font-semibold ${headingClass}`}>You're already set up</h2>
           </div>
           <p className={`text-sm mb-4 ${mutedClass}`}>
-            Ortelius already tracks a set of public repos platform-wide, so there's real vulnerability data to
-            explore right away — no setup required on your end.
+            We've added a few popular public repos to your Favorites so you have real vulnerability data to explore right away.
           </p>
 
           {loadingRepos ? (
-            <p className={`text-sm ${mutedClass}`}>Checking what's already tracked…</p>
-          ) : previewRepos.length === 0 ? (
-            <p className={`text-sm ${mutedClass}`}>Nothing tracked platform-wide yet — be the first to add one in Step 2 below.</p>
+            <p className={`text-sm ${mutedClass}`}>Loading your favorites…</p>
+          ) : trackedRepos.length === 0 ? (
+            <p className={`text-sm ${mutedClass}`}>No default favorites found yet — search for one below to get started.</p>
           ) : (
-            <>
-              <p className={`text-xs font-semibold uppercase tracking-wider mb-2 ${mutedClass}`}>Already tracked on Ortelius</p>
-              <div className="flex flex-wrap gap-2">
-                {previewRepos.map(repo => (
-                  <span
-                    key={repo.key}
-                    className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium border ${
-                      isDark ? 'bg-[#0d1117] border-[#30363d] text-[#e6edf3]' : 'bg-gray-50 border-gray-200 text-gray-800'
-                    }`}
-                  >
-                    <GitHubIcon sx={{ fontSize: 14 }} className={mutedClass} />
-                    {repo.owner}/{repo.name}
-                  </span>
-                ))}
-              </div>
-            </>
+            <div className="flex flex-wrap gap-2">
+              {trackedRepos.map(repo => (
+                <span
+                  key={repo.key}
+                  className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium border ${
+                    isDark ? 'bg-[#0d1117] border-[#30363d] text-[#e6edf3]' : 'bg-gray-50 border-gray-200 text-gray-800'
+                  }`}
+                >
+                  <GitHubIcon sx={{ fontSize: 14 }} className={mutedClass} />
+                  {repo.owner}/{repo.name}
+                </span>
+              ))}
+            </div>
           )}
-
-          <button
-            onClick={() => router.push('/')}
-            className="mt-4 text-sm font-medium text-blue-600 hover:text-blue-700"
-          >
-            Browse public organizations →
-          </button>
         </div>
 
-        {/* Step 2a — REAL personal favoriting. Stars an org via toggleFavoriteOrg
-            (per-user, zero side effects, fully reversible). Only offered for
-            orgs already tracked above, since favoriting one without data does
-            nothing useful yet. */}
-        {previewRepos.length > 0 && (
-          <div className="p-6 rounded-xl border shadow-sm" style={cardStyle}>
-            <h2 className={`text-lg font-semibold mb-1 ${headingClass}`}>Star a few to personalize your view</h2>
-            <p className={`text-sm mb-4 ${mutedClass}`}>
-              Starring an org only affects your own view — it filters the Organizations page down to what you
-              care about. It doesn't change what Ortelius scans.
-            </p>
-            <div className="flex flex-wrap gap-2">
-              {previewRepos.map(repo => {
-                const isFav = favoriteOrgs.includes(repo.owner)
-                return (
-                  <button
-                    key={repo.key}
-                    onClick={() => toggleFavoriteOrg(repo.owner)}
-                    disabled={loadingFavorites || togglingOrg === repo.owner}
-                    className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium border transition-colors disabled:opacity-50 ${
-                      isFav
-                        ? isDark ? 'bg-yellow-900/30 border-yellow-700 text-yellow-300' : 'bg-yellow-50 border-yellow-300 text-yellow-800'
-                        : isDark ? 'bg-[#0d1117] border-[#30363d] text-[#e6edf3] hover:border-[#8b949e]' : 'bg-gray-50 border-gray-200 text-gray-800 hover:border-gray-400'
-                    }`}
-                  >
-                    {isFav ? <StarIcon sx={{ fontSize: 14 }} /> : <StarBorderIcon sx={{ fontSize: 14 }} />}
-                    {repo.owner}
-                  </button>
-                )
-              })}
-            </div>
-          </div>
-        )}
-
-        {/* Step 2b — track a NEW repo platform-wide. Deliberately not called
-            "favorite": writes to system_tracked_repos, visible to every user,
-            and triggers ongoing scanning. Kept as a clearly separate action
-            from the starring above. */}
+        {/* Step 2 — optional repo search */}
         <div className="p-6 rounded-xl border shadow-sm" style={cardStyle}>
           <h2 className={`text-lg font-semibold mb-1 ${headingClass}`}>
-            Don't see something you deploy? Track it <span className={`text-sm font-normal ${mutedClass}`}>(optional)</span>
+            Favorite a repo you deploy <span className={`text-sm font-normal ${mutedClass}`}>(optional)</span>
           </h2>
           <p className={`text-sm mb-4 ${mutedClass}`}>
-            Search for something you actually run in production — e.g. <strong>nginx</strong>, <strong>curl</strong>, <strong>redis</strong>.
-            Adding it makes Ortelius start scanning it for CVEs <strong>platform-wide</strong>, visible to everyone — not just you.
+            Search for something you actually run in production — e.g. <strong>nginx</strong>, <strong>curl</strong>, <strong>redis</strong> — and we'll start scanning it for CVEs.
           </p>
 
           <div className="flex gap-2 flex-wrap mb-3">
@@ -341,11 +227,11 @@ export default function WelcomePage() {
                     {r.description && <p className={`text-xs truncate mt-0.5 ${mutedClass}`}>{r.description}</p>}
                   </div>
                   <button
-                    onClick={() => handleTrackRepo(r)}
+                    onClick={() => handleAddFavorite(r)}
                     disabled={trackingKey === `${r.owner}/${r.name}`}
                     className="px-3 py-1 rounded bg-green-600 hover:bg-green-700 disabled:opacity-50 text-white text-xs font-medium transition-colors ml-3 shrink-0"
                   >
-                    {trackingKey === `${r.owner}/${r.name}` ? '…' : 'Track repo'}
+                    {trackingKey === `${r.owner}/${r.name}` ? '…' : 'Add to Favorites'}
                   </button>
                 </div>
               ))}

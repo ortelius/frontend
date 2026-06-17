@@ -294,6 +294,12 @@ export default function ProjectsPage() {
     return true
   })
 
+  // No views checked at all (My Orgs / Favorites / Public all unchecked) is a
+  // distinct empty state from "views are checked, but nothing matched" —
+  // the former needs the user to pick a view, the latter needs them to relax
+  // a filter or go add a favorite.
+  const noViewsSelected = !showMyOrgs && !showFavorites && !showPublic
+
   return (
     <div className="flex w-full">
       <Sidebar
@@ -320,12 +326,21 @@ export default function ProjectsPage() {
           ) : filteredData.length === 0 ? (
             <div className="text-center py-12 bg-white rounded-xl border border-gray-200 border-dashed">
               <BusinessIcon className="mx-auto h-12 w-12 text-gray-300" />
-              <h3 className="mt-2 text-sm font-medium text-gray-900">No organizations found</h3>
-              <p className="mt-1 text-sm text-gray-500">
-                {!showMyOrgs && !showFavorites && !showPublic
-                  ? 'Enable at least one filter above to see organizations.'
-                  : 'No organizations match your current filters.'}
-              </p>
+              {noViewsSelected ? (
+                <>
+                  <h3 className="mt-2 text-sm font-medium text-gray-900">No views selected</h3>
+                  <p className="mt-1 text-sm text-gray-500">
+                    Choose My Orgs, Favorites, or Public to see organizations.
+                  </p>
+                </>
+              ) : (
+                <>
+                  <h3 className="mt-2 text-sm font-medium text-gray-900">No organizations match your filters</h3>
+                  <p className="mt-1 text-sm text-gray-500">
+                    Try a different name search or enable another view. Add public repos to Favorites from your profile to keep their vulnerability data fresh.
+                  </p>
+                </>
+              )}
             </div>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 pb-6">

@@ -341,6 +341,50 @@ export default function SearchResults({ query, category, filters }: SearchResult
     return 'Results'
   }
 
+  // Distinguish "nothing matched the current search/filters" from
+  // "there's genuinely nothing here yet" — the latter points people at
+  // Favorites instead of telling them to adjust filters that aren't set.
+  const isFiltered = Boolean(
+    query ||
+    filters.name ||
+    (filters.vulnerabilityScore?.length ?? 0) > 0 ||
+    (filters.openssfScore?.length ?? 0) > 0 ||
+    (filters.status?.length ?? 0) > 0 ||
+    (filters.environment?.length ?? 0) > 0 ||
+    (filters.endpointType?.length ?? 0) > 0
+  )
+
+  const emptyStateCopy = (() => {
+    if (isFiltered) {
+      return {
+        title: `No ${getCategoryTitle().toLowerCase()} match your filters`,
+        subtitle: 'Try a different search term or enabling another filter.',
+      }
+    }
+    switch (category) {
+      case 'image':
+        return {
+          title: 'No synced endpoints yet',
+          subtitle: 'Endpoints appear here once a favorited repo is deployed and scanned. Add public repos to Favorites from your profile to get started.',
+        }
+      case 'all':
+        return {
+          title: 'No releases yet',
+          subtitle: 'Releases appear here once a favorited repo has been scanned. Add public repos to Favorites from your profile to get started.',
+        }
+      case 'plugin':
+        return {
+          title: 'No vulnerabilities found',
+          subtitle: 'Favorite a repo from your profile to start tracking its CVEs.',
+        }
+      default:
+        return {
+          title: 'No results found',
+          subtitle: 'Try adjusting your search or filters.',
+        }
+    }
+  })()
+
   if (loading) {
     return (
       <div className="px-6 py-6">
@@ -457,8 +501,8 @@ export default function SearchResults({ query, category, filters }: SearchResult
       {filteredData.length === 0 ? (
         <div className="text-center py-12">
           <svg className="mx-auto h-12 w-12 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.172 16.172a4 4 0 015.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
-          <h3 className="mt-2 text-sm font-medium text-gray-900">No results found</h3>
-          <p className="mt-1 text-sm text-gray-500">Try adjusting your search or filters</p>
+          <h3 className="mt-2 text-sm font-medium text-gray-900">{emptyStateCopy.title}</h3>
+          <p className="mt-1 text-sm text-gray-500">{emptyStateCopy.subtitle}</p>
         </div>
       ) : (
         <>

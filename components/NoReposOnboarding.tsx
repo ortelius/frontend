@@ -4,8 +4,8 @@
  * NoReposOnboarding
  *
  * Shown on the dashboard/releases page when the user is authenticated but
- * their org(s) have no watched repos yet. Guides them to watch their first
- * public GitHub or GitLab repo.
+ * their org(s) have no favorited repos yet. Guides them to favorite their
+ * first public GitHub or GitLab repo.
  *
  * Usage:
  *   import NoReposOnboarding from '@/components/NoReposOnboarding'
@@ -51,9 +51,9 @@ export default function NoReposOnboarding({ orgs, ctaHref }: Props) {
 
       {/* Heading */}
       <div>
-        <h2 className={`text-xl font-semibold mb-2 ${text}`}>Nothing watched yet</h2>
+        <h2 className={`text-xl font-semibold mb-2 ${text}`}>No favorites yet</h2>
         <p className={`text-sm leading-relaxed ${muted}`}>
-          Watch a repo you deploy and we'll show you exactly which CVEs are running in production — not just in your code.
+          Favorite a repo you deploy and we'll show you exactly which CVEs are running in production — not just in your code.
         </p>
       </div>
 
@@ -67,7 +67,7 @@ export default function NoReposOnboarding({ orgs, ctaHref }: Props) {
           </li>
           <li className="flex items-start gap-2">
             <span className="font-bold mt-0.5">2.</span>
-            <span>Click <strong>Watch</strong> — we'll scan it for known CVEs within ~10 minutes</span>
+            <span>Click <strong>Add to Favorites</strong> — we'll scan it for known CVEs within ~10 minutes</span>
           </li>
           <li className="flex items-start gap-2">
             <span className="font-bold mt-0.5">3.</span>
@@ -83,12 +83,12 @@ export default function NoReposOnboarding({ orgs, ctaHref }: Props) {
           className="flex items-center gap-2 px-5 py-2.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium transition-colors"
         >
           <AddCircleOutlineIcon sx={{ fontSize: 18 }} />
-          Watch your first repo
+          Add your first favorite
           <ArrowForwardIcon sx={{ fontSize: 16 }} />
         </button>
       ) : (
         <p className={`text-sm ${muted}`}>
-          Ask your org owner to watch repositories from the org settings page.
+          Ask your org owner to favorite repositories from the org settings page.
         </p>
       )}
 
