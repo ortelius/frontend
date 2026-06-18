@@ -79,9 +79,6 @@ export default function WelcomePage() {
     }
   }
 
-  // Probing /github/repos doubles as an "is the App connected" check — a
-  // non-OK response (e.g. "GitHub App not connected") just means show the
-  // connect button instead of the picker.
   const fetchGithubStatus = async () => {
     setLoadingGithubStatus(true)
     try {
@@ -111,8 +108,6 @@ export default function WelcomePage() {
 
   const handleConnectGithub = async () => {
     const endpoint = await getEndpoint()
-    // return_to tells the backend to send the user back here (instead of the
-    // default /profile) once the GitHub App install + authorize flow completes.
     window.location.href = `${endpoint}/auth/github/login?return_to=/welcome`
   }
 
@@ -297,9 +292,12 @@ export default function WelcomePage() {
           ) : githubRepos.length === 0 ? (
             <p className={`text-sm ${mutedClass}`}>
               No repositories found for this installation.{' '}
-              <a href="https://github.com/settings/installations" target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline inline-flex items-center gap-0.5">
+              <button 
+                onClick={handleConnectGithub} 
+                className="text-blue-600 hover:underline inline-flex items-center gap-0.5 bg-transparent border-none cursor-pointer p-0"
+              >
                 Grant access to repos on GitHub <OpenInNewIcon sx={{ fontSize: 12 }} />
-              </a>
+              </button>
             </p>
           ) : (
             <>
