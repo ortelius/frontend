@@ -27,6 +27,12 @@ export default function TopNavigation() {
   const { selectedOrg, setSelectedOrg } = useOrg()
   const { user, isLoading } = useAuth() // Added auth hook
 
+  // Invitation/account-activation flow — suppress breadcrumbs and the
+  // public-data banner on this route; the token in the URL isn't useful
+  // to show, and the sign-in/sign-up prompt doesn't apply to someone who's
+  // mid-way through activating their own account.
+  const isInvitationPage = pathname.startsWith('/invitation')
+
   const isActive = (path: string) => {
     return pathname === path
   }
@@ -103,8 +109,9 @@ export default function TopNavigation() {
 
   const breadcrumbs = generateBreadcrumbs()
 
-  // Only show banner if not loading and no user logged in
-  const showBanner = !isLoading && !user;
+  // Only show banner if not loading, no user logged in, and not on the
+  // invitation/account-activation flow
+  const showBanner = !isLoading && !user && !isInvitationPage;
 
   return (
     <div className="flex flex-col flex-shrink-0 z-50 shadow-sm relative">
@@ -144,7 +151,7 @@ export default function TopNavigation() {
                 <span>Switch Org</span>
               </Link>
               
-              {breadcrumbs.length > 1 && (
+              {breadcrumbs.length > 1 && !isInvitationPage && (
                 <div className="flex items-center gap-2">
                   {breadcrumbs.slice(1).map((crumb, index) => {
                     const isLast = index === breadcrumbs.length - 2 
