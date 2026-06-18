@@ -1,48 +1,33 @@
 'use client'
 
 import React, { useState, useEffect } from 'react'
-import { useRouter } from 'next/navigation'
+import { useParams, useRouter } from 'next/navigation'
 import { useAuth } from '@/context/AuthContext'
 import { useTheme } from '@/context/ThemeContext'
 
 import CheckCircleIcon from '@mui/icons-material/CheckCircle'
-import SearchIcon from '@mui/icons-material/Search'
-import ArrowForwardIcon from '@mui/icons-material/ArrowForward'
-import GitHubIcon from '@mui/icons-material/GitHub'
-import StarIcon from '@mui/icons-material/Star'
-import StarBorderIcon from '@mui/icons-material/StarBorder'
+import ErrorOutlineIcon from '@mui/icons-material/ErrorOutline'
 
-interface TrackedRepo {
-  key: string
-  provider: string
-  owner: string
-  name: string
+interface InvitationDetails {
+  username: string
+  email: string
+  role: string
 }
 
-export default function WelcomePage() {
+export default function InvitationPage() {
+  const params = useParams()
   const router = useRouter()
   const { user } = useAuth()
   const { isDark } = useTheme()
 
-  // Platform-wide tracked repos (system_tracked_repos) — NOT per-user.
-  const [trackedRepos, setTrackedRepos] = useState<TrackedRepo[]>([])
-  const [loadingRepos, setLoadingRepos] = useState(true)
+  const token = decodeURIComponent(params.name as string)
 
-  // This user's personal org favorites (model.User.FavoriteOrgs via GraphQL).
-  const [favoriteOrgs, setFavoriteOrgs] = useState<string[]>([])
-  const [loadingFavorites, setLoadingFavorites] = useState(true)
-  const [togglingOrg, setTogglingOrg] = useState<string | null>(null)
+  const [status, setStatus] = useState<'loading' | 'valid' | 'invalid' | 'submitting' | 'accepted'>('loading')
+  const [invitation, setInvitation] = useState<InvitationDetails | null>(null)
+  const [errorMsg, setErrorMsg] = useState('')
 
-  const [repoQuery, setRepoQuery] = useState('')
-  const [repoProvider, setRepoProvider] = useState<'github' | 'gitlab'>('github')
-  const [searchResults, setSearchResults] = useState<any[]>([])
-  const [searching, setSearching] = useState(false)
-  const [trackingKey, setTrackingKey] = useState<string | null>(null)
-  const [searchMsg, setSearchMsg] = useState<{ msg: string; ok: boolean } | null>(null)
-
-  useEffect(() => {
-    if (user === null) router.push('/')
-  }, [user, router])
+  const [password, setPassword] = useState('')
+  const [passwordConfirm, setPasswordConfirm] = useState('')
 
   const getEndpoint = async () => {
     const res = await fetch('/config')
@@ -50,336 +35,149 @@ export default function WelcomePage() {
     return cfg.restEndpoint || 'http://localhost:3000/api/v1'
   }
 
-  const graphqlFetch = async (query: string, variables?: Record<string, unknown>) => {
-    const endpoint = await getEndpoint()
-    const res = await fetch(`${endpoint}/graphql`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      credentials: 'include',
-      body: JSON.stringify({ query, variables }),
-    })
-    const json = await res.json()
-    if (json.errors?.length) throw new Error(json.errors[0].message)
-    return json.data
-  }
-
-  // GET /tracked-repos — the platform-wide system_tracked_repos list.
-  // This is the same data the Organizations page "pending scan" badges read
-  // from. It's global, not scoped to this user, so we frame it that way.
-  const fetchTrackedRepos = async () => {
-    setLoadingRepos(true)
-    try {
-      const endpoint = await getEndpoint()
-      const res = await fetch(`${endpoint}/tracked-repos`, { credentials: 'include' })
-      if (res.ok) {
-        const data = await res.json()
-        setTrackedRepos(data.repos ?? [])
-      }
-    } catch (e) {
-      console.error('Failed to fetch tracked repos', e)
-    } finally {
-      setLoadingRepos(false)
-    }
-  }
-
-  // myFavoriteOrgs — this user's personal bookmark list. Zero relationship
-  // to system_tracked_repos; toggling these never starts or stops scanning.
-  const fetchFavoriteOrgs = async () => {
-    setLoadingFavorites(true)
-    try {
-      const data = await graphqlFetch(`query { myFavoriteOrgs }`)
-      setFavoriteOrgs(data?.myFavoriteOrgs ?? [])
-    } catch (e) {
-      console.error('Failed to fetch favorite orgs', e)
-    } finally {
-      setLoadingFavorites(false)
-    }
-  }
+  // Already logged in? This link doesn't apply — send them on, don't make
+  // them re-accept an invite they've already used.
+  useEffect(() => {
+    if (user) router.push('/dashboard')
+  }, [user, router])
 
   useEffect(() => {
-    if (user) {
-      fetchTrackedRepos()
-      fetchFavoriteOrgs()
-    }
-  }, [user])
+    if (user || !token) return
 
-  const toggleFavoriteOrg = async (orgName: string) => {
-    setTogglingOrg(orgName)
-    try {
-      const data = await graphqlFetch(
-        `mutation($orgName: String!) { toggleFavoriteOrg(orgName: $orgName) }`,
-        { orgName }
-      )
-      setFavoriteOrgs(data?.toggleFavoriteOrg ?? [])
-    } catch (e) {
-      console.error('Failed to toggle favorite org', e)
-    } finally {
-      setTogglingOrg(null)
-    }
-  }
-
-  const searchRepos = async () => {
-    if (!repoQuery.trim()) return
-    setSearching(true)
-    setSearchResults([])
-    setSearchMsg(null)
-    try {
-      const endpoint = await getEndpoint()
-      const res = await fetch(
-        `${endpoint}/github/search?q=${encodeURIComponent(repoQuery)}&provider=${repoProvider}`,
-        { credentials: 'include' }
-      )
-      if (res.ok) {
-        const data = await res.json()
-        setSearchResults(data.results || [])
+    const fetchInvitation = async () => {
+      try {
+        const endpoint = await getEndpoint()
+        const res = await fetch(`${endpoint}/invitation/${encodeURIComponent(token)}`)
+        if (res.ok) {
+          setInvitation(await res.json())
+          setStatus('valid')
+        } else {
+          const data = await res.json().catch(() => ({}))
+          setErrorMsg(data.error || 'This invitation link is invalid or has expired.')
+          setStatus('invalid')
+        }
+      } catch {
+        setErrorMsg('Could not reach the server. Please try again.')
+        setStatus('invalid')
       }
-    } catch (e) {
-      console.error('Search failed', e)
-    } finally {
-      setSearching(false)
     }
-  }
 
-  // Adds to system_tracked_repos — a PLATFORM-WIDE action. This is
-  // deliberately not called "favorite": it starts scanning the repo for
-  // every user on Ortelius, not just this one. Copy below says so plainly.
-  const handleTrackRepo = async (result: any) => {
-    const key = `${result.owner}/${result.name}`
-    setTrackingKey(key)
-    setSearchMsg(null)
+    fetchInvitation()
+  }, [user, token])
+
+  const handleAccept = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (password !== passwordConfirm) {
+      setErrorMsg('Passwords do not match')
+      return
+    }
+    if (password.length < 8) {
+      setErrorMsg('Password must be at least 8 characters long')
+      return
+    }
+
+    setStatus('submitting')
+    setErrorMsg('')
+
     try {
       const endpoint = await getEndpoint()
-      const res = await fetch(`${endpoint}/tracked-repos`, {
+      const res = await fetch(`${endpoint}/invitation/${encodeURIComponent(token)}/accept`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
-        body: JSON.stringify({
-          provider: result.provider,
-          owner: result.owner,
-          name: result.name,
-        }),
+        body: JSON.stringify({ password, password_confirm: passwordConfirm, token }),
       })
+
       const data = await res.json()
+
       if (res.ok) {
-        setSearchMsg({ msg: `Now tracking ${key} platform-wide — it'll start appearing for everyone on Ortelius.`, ok: true })
-        setSearchResults(prev => prev.filter(r => `${r.owner}/${r.name}` !== key))
-        fetchTrackedRepos()
+        setStatus('accepted')
+        // Full reload so AuthContext re-initializes from the new auth_token cookie,
+        // then land on the existing onboarding page.
+        setTimeout(() => { window.location.href = '/welcome' }, 1200)
       } else {
-        setSearchMsg({ msg: data.error || 'Failed to track repo', ok: false })
+        setErrorMsg(data.error || 'Failed to activate account')
+        setStatus('valid')
       }
-    } catch (e) {
-      setSearchMsg({ msg: 'Network error', ok: false })
-    } finally {
-      setTrackingKey(null)
+    } catch {
+      setErrorMsg('Network error — please try again')
+      setStatus('valid')
     }
   }
 
-  if (!user) return null
-
   const pageBg = isDark ? 'bg-[#0d1117]' : 'bg-gray-50'
-  const cardStyle = {
-    backgroundColor: isDark ? '#161b22' : '#ffffff',
-    borderColor: isDark ? '#30363d' : '#e5e7eb',
-  }
+  const cardStyle = { backgroundColor: isDark ? '#161b22' : '#ffffff', borderColor: isDark ? '#30363d' : '#e5e7eb' }
+  const inputStyle = { backgroundColor: isDark ? '#0d1117' : '#ffffff', borderColor: isDark ? '#30363d' : '#d1d5db', color: isDark ? '#e6edf3' : '#111827' }
   const headingClass = isDark ? 'text-[#f0f6fc]' : 'text-gray-900'
   const mutedClass = isDark ? 'text-[#8b949e]' : 'text-gray-500'
-  const textClass = isDark ? 'text-[#e6edf3]' : 'text-gray-900'
-  const inputStyle = {
-    backgroundColor: isDark ? '#0d1117' : '#ffffff',
-    borderColor: isDark ? '#30363d' : '#d1d5db',
-    color: isDark ? '#e6edf3' : '#111827',
-  }
 
-  // First few platform-tracked repos, used both as "look, real data" proof
-  // in Step 1 and as quick-star candidates in Step 2.
-  const previewRepos = trackedRepos.slice(0, 6)
+  if (user) return null // redirecting
 
   return (
-    <div className={`flex-1 overflow-y-auto ${pageBg}`}>
-      <div className="max-w-3xl mx-auto px-6 py-12 space-y-8">
+    <div className={`min-h-screen flex items-center justify-center px-4 ${pageBg}`}>
+      <div className="max-w-md w-full p-8 rounded-xl border shadow-sm" style={cardStyle}>
 
-        {/* Header */}
-        <div className="text-center">
-          <h1 className={`text-3xl font-bold ${headingClass}`}>Welcome to Ortelius, {user.username}!</h1>
-          <p className={`mt-2 text-sm ${mutedClass}`}>
-            Let's get your vulnerability dashboard set up. This only takes a minute.
-          </p>
-        </div>
-
-        {/* Step 1 — real data already exists platform-wide (system_tracked_repos),
-            NOT personal favorites. New users have an empty FavoriteOrgs list;
-            claiming otherwise here would be inaccurate. */}
-        <div className="p-6 rounded-xl border shadow-sm" style={cardStyle}>
-          <div className="flex items-center gap-2 mb-1">
-            <CheckCircleIcon sx={{ fontSize: 20 }} className="text-green-600" />
-            <h2 className={`text-lg font-semibold ${headingClass}`}>Real data, zero setup</h2>
-          </div>
-          <p className={`text-sm mb-4 ${mutedClass}`}>
-            Ortelius already tracks a set of public repos platform-wide, so there's real vulnerability data to
-            explore right away — no setup required on your end.
-          </p>
-
-          {loadingRepos ? (
-            <p className={`text-sm ${mutedClass}`}>Checking what's already tracked…</p>
-          ) : previewRepos.length === 0 ? (
-            <p className={`text-sm ${mutedClass}`}>Nothing tracked platform-wide yet — be the first to add one in Step 2 below.</p>
-          ) : (
-            <>
-              <p className={`text-xs font-semibold uppercase tracking-wider mb-2 ${mutedClass}`}>Already tracked on Ortelius</p>
-              <div className="flex flex-wrap gap-2">
-                {previewRepos.map(repo => (
-                  <span
-                    key={repo.key}
-                    className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium border ${
-                      isDark ? 'bg-[#0d1117] border-[#30363d] text-[#e6edf3]' : 'bg-gray-50 border-gray-200 text-gray-800'
-                    }`}
-                  >
-                    <GitHubIcon sx={{ fontSize: 14 }} className={mutedClass} />
-                    {repo.owner}/{repo.name}
-                  </span>
-                ))}
-              </div>
-            </>
-          )}
-
-          <button
-            onClick={() => router.push('/')}
-            className="mt-4 text-sm font-medium text-blue-600 hover:text-blue-700"
-          >
-            Browse public organizations →
-          </button>
-        </div>
-
-        {/* Step 2a — REAL personal favoriting. Stars an org via toggleFavoriteOrg
-            (per-user, zero side effects, fully reversible). Only offered for
-            orgs already tracked above, since favoriting one without data does
-            nothing useful yet. */}
-        {previewRepos.length > 0 && (
-          <div className="p-6 rounded-xl border shadow-sm" style={cardStyle}>
-            <h2 className={`text-lg font-semibold mb-1 ${headingClass}`}>Star a few to personalize your view</h2>
-            <p className={`text-sm mb-4 ${mutedClass}`}>
-              Starring an org only affects your own view — it filters the Organizations page down to what you
-              care about. It doesn't change what Ortelius scans.
-            </p>
-            <div className="flex flex-wrap gap-2">
-              {previewRepos.map(repo => {
-                const isFav = favoriteOrgs.includes(repo.owner)
-                return (
-                  <button
-                    key={repo.key}
-                    onClick={() => toggleFavoriteOrg(repo.owner)}
-                    disabled={loadingFavorites || togglingOrg === repo.owner}
-                    className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium border transition-colors disabled:opacity-50 ${
-                      isFav
-                        ? isDark ? 'bg-yellow-900/30 border-yellow-700 text-yellow-300' : 'bg-yellow-50 border-yellow-300 text-yellow-800'
-                        : isDark ? 'bg-[#0d1117] border-[#30363d] text-[#e6edf3] hover:border-[#8b949e]' : 'bg-gray-50 border-gray-200 text-gray-800 hover:border-gray-400'
-                    }`}
-                  >
-                    {isFav ? <StarIcon sx={{ fontSize: 14 }} /> : <StarBorderIcon sx={{ fontSize: 14 }} />}
-                    {repo.owner}
-                  </button>
-                )
-              })}
-            </div>
+        {status === 'loading' && (
+          <div className="text-center py-8">
+            <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600" />
+            <p className={`mt-4 text-sm ${mutedClass}`}>Checking your invitation…</p>
           </div>
         )}
 
-        {/* Step 2b — track a NEW repo platform-wide. Deliberately not called
-            "favorite": writes to system_tracked_repos, visible to every user,
-            and triggers ongoing scanning. Kept as a clearly separate action
-            from the starring above. */}
-        <div className="p-6 rounded-xl border shadow-sm" style={cardStyle}>
-          <h2 className={`text-lg font-semibold mb-1 ${headingClass}`}>
-            Don't see something you deploy? Track it <span className={`text-sm font-normal ${mutedClass}`}>(optional)</span>
-          </h2>
-          <p className={`text-sm mb-4 ${mutedClass}`}>
-            Search for something you actually run in production — e.g. <strong>nginx</strong>, <strong>curl</strong>, <strong>redis</strong>.
-            Adding it makes Ortelius start scanning it for CVEs <strong>platform-wide</strong>, visible to everyone — not just you.
-          </p>
-
-          <div className="flex gap-2 flex-wrap mb-3">
-            <div className={`flex rounded-md border overflow-hidden text-xs font-medium ${isDark ? 'border-[#30363d]' : 'border-gray-200'}`}>
-              {(['github', 'gitlab'] as const).map(p => (
-                <button
-                  key={p}
-                  onClick={() => { setRepoProvider(p); setSearchResults([]) }}
-                  className={`px-3 py-1.5 capitalize transition-colors ${
-                    repoProvider === p
-                      ? isDark ? 'bg-blue-700 text-white' : 'bg-blue-600 text-white'
-                      : isDark ? 'bg-[#161b22] text-[#8b949e] hover:text-white' : 'bg-gray-50 text-gray-500 hover:text-gray-800'
-                  }`}
-                >
-                  {p}
-                </button>
-              ))}
-            </div>
-            <input
-              type="text"
-              value={repoQuery}
-              onChange={e => setRepoQuery(e.target.value)}
-              onKeyDown={e => e.key === 'Enter' && searchRepos()}
-              placeholder="Search name or owner/repo — e.g. curl/curl"
-              style={inputStyle}
-              className="flex-1 min-w-[200px] text-sm px-3 py-1.5 rounded-md border outline-none"
-            />
-            <button
-              onClick={searchRepos}
-              disabled={searching || !repoQuery.trim()}
-              className="flex items-center gap-1.5 px-4 py-1.5 rounded-md bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white text-sm font-medium transition-colors"
-            >
-              <SearchIcon sx={{ fontSize: 16 }} />
-              {searching ? '…' : 'Search'}
-            </button>
-          </div>
-
-          {searchResults.length > 0 && (
-            <div className={`rounded-md border divide-y max-h-56 overflow-y-auto mb-3 ${isDark ? 'border-[#30363d] divide-[#30363d]' : 'border-gray-200 divide-gray-100'}`}>
-              {searchResults.map((r, i) => (
-                <div key={i} className={`flex items-center justify-between px-3 py-2 text-sm ${isDark ? 'bg-[#161b22]' : 'bg-white'}`}>
-                  <div className="min-w-0">
-                    <span className={`font-semibold ${textClass}`}>{r.owner}/{r.name}</span>
-                    {r.description && <p className={`text-xs truncate mt-0.5 ${mutedClass}`}>{r.description}</p>}
-                  </div>
-                  <button
-                    onClick={() => handleTrackRepo(r)}
-                    disabled={trackingKey === `${r.owner}/${r.name}`}
-                    className="px-3 py-1 rounded bg-green-600 hover:bg-green-700 disabled:opacity-50 text-white text-xs font-medium transition-colors ml-3 shrink-0"
-                  >
-                    {trackingKey === `${r.owner}/${r.name}` ? '…' : 'Track repo'}
-                  </button>
-                </div>
-              ))}
-            </div>
-          )}
-
-          {searchMsg && (
-            <p className={`text-sm ${searchMsg.ok ? (isDark ? 'text-green-400' : 'text-green-700') : (isDark ? 'text-red-400' : 'text-red-600')}`}>
-              {searchMsg.msg}
+        {status === 'invalid' && (
+          <div className="text-center py-8">
+            <ErrorOutlineIcon sx={{ fontSize: 40 }} className="text-red-500 mb-2" />
+            <h2 className={`text-lg font-semibold ${headingClass}`}>Invitation not valid</h2>
+            <p className={`text-sm mt-2 ${mutedClass}`}>{errorMsg}</p>
+            <p className={`text-sm mt-4 ${mutedClass}`}>
+              Ask your administrator to resend the invitation, or{' '}
+              <a href="/" className="text-blue-600 hover:underline">sign in</a> if you already have an account.
             </p>
-          )}
-        </div>
+          </div>
+        )}
 
-        {/* Step 3 — deployment-location question, stubbed pending item 10 (Helm/GitOps scanner support) */}
-        <div className="p-6 rounded-xl border shadow-sm opacity-60" style={cardStyle}>
-          <h2 className={`text-lg font-semibold mb-1 ${headingClass}`}>
-            How is this deployed? <span className={`text-sm font-normal ${mutedClass}`}>(coming soon)</span>
-          </h2>
-          <p className={`text-sm ${mutedClass}`}>
-            We'll soon ask whether a repo ships its own software, is a GitOps config repo, or deploys via Helm — so we can
-            pick up deployments our scanner can't detect automatically yet. No action needed here for now.
-          </p>
-        </div>
+        {status === 'accepted' && (
+          <div className="text-center py-8">
+            <CheckCircleIcon sx={{ fontSize: 40 }} className="text-green-600 mb-2" />
+            <h2 className={`text-lg font-semibold ${headingClass}`}>Account activated!</h2>
+            <p className={`text-sm mt-2 ${mutedClass}`}>Taking you to your dashboard…</p>
+          </div>
+        )}
 
-        {/* Step 4 — continue to dashboard */}
-        <div className="flex justify-center pt-2">
-          <button
-            onClick={() => router.push('/dashboard')}
-            className="flex items-center gap-2 px-6 py-3 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold transition-colors"
-          >
-            Go to Dashboard
-            <ArrowForwardIcon sx={{ fontSize: 18 }} />
-          </button>
-        </div>
+        {(status === 'valid' || status === 'submitting') && invitation && (
+          <>
+            <h2 className={`text-2xl font-bold mb-1 ${headingClass}`}>Welcome, {invitation.username}!</h2>
+            <p className={`text-sm mb-6 ${mutedClass}`}>
+              Set a password for <strong>{invitation.email}</strong> ({invitation.role}) to activate your account.
+            </p>
+
+            <form onSubmit={handleAccept} className="space-y-4">
+              <div>
+                <label className={`block text-sm font-medium mb-1 ${mutedClass}`}>Password</label>
+                <input type="password" required minLength={8} value={password}
+                  onChange={e => setPassword(e.target.value)} style={inputStyle}
+                  className="w-full px-3 py-2 border rounded-md outline-none" />
+              </div>
+              <div>
+                <label className={`block text-sm font-medium mb-1 ${mutedClass}`}>Confirm Password</label>
+                <input type="password" required minLength={8} value={passwordConfirm}
+                  onChange={e => setPasswordConfirm(e.target.value)} style={inputStyle}
+                  className="w-full px-3 py-2 border rounded-md outline-none" />
+              </div>
+
+              {errorMsg && (
+                <div className="text-red-600 text-xs p-3 rounded bg-red-50 dark:bg-[rgba(248,81,73,0.15)] border border-red-200 dark:border-[rgba(248,81,73,0.5)]">
+                  {errorMsg}
+                </div>
+              )}
+
+              <button type="submit" disabled={status === 'submitting'}
+                className="w-full py-2.5 px-4 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-md transition-colors disabled:opacity-50">
+                {status === 'submitting' ? 'Activating…' : 'Activate Account & Sign In'}
+              </button>
+            </form>
+          </>
+        )}
       </div>
     </div>
   )
