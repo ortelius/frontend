@@ -9,12 +9,23 @@ import LogoutIcon from '@mui/icons-material/Logout'
 import PersonIcon from '@mui/icons-material/Person' // Added icon for profile
 
 export default function AuthProfile({ isExpanded }: { isExpanded: boolean }) {
-  const { user, login, logout, isLoading } = useAuth()
+  const { user, login, logout, isLoading, ssoError } = useAuth()
   const { isDark } = useTheme()
   const router = useRouter()
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState(false)
+
+  // Kicks off a redirect-based SSO flow. `provider` must match a route
+  // mounted on the backend: "google" (and later "authentik", "okta" via the
+  // generic OIDC route), or "github-signin" for GitHub's OAuth2 sign-in.
+  const handleSsoLogin = async (provider: string) => {
+    const res = await fetch('/config')
+    const config = await res.json()
+    const endpoint = config.restEndpoint || 'http://localhost:3000/api/v1'
+    const returnTo = window.location.pathname === '/' ? '/' : window.location.pathname
+    window.location.href = `${endpoint}/auth/${provider}/login?return_to=${encodeURIComponent(returnTo)}`
+  }
 
   if (isLoading) {
     return (
@@ -119,6 +130,66 @@ export default function AuthProfile({ isExpanded }: { isExpanded: boolean }) {
       className="p-4 border-t border-gray-100 dark:border-gray-800"
       style={{ backgroundColor: isDark ? '#0d1117' : '#ffffff' }}
     >
+      {ssoError && (
+        <p
+          style={{ color: isDark ? '#f85149' : '#dc2626' }}
+          className="text-xs font-medium text-center mb-3"
+        >
+          {ssoError === 'domain_not_allowed'
+            ? 'That account is not part of this organization.'
+            : 'Sign-in failed. Please try again.'}
+        </p>
+      )}
+
+      <div className="flex flex-col gap-2 mb-3">
+        <button
+          type="button"
+          onClick={() => handleSsoLogin('google')}
+          style={{
+            backgroundColor: isDark ? '#0d1117' : '#ffffff',
+            borderColor: isDark ? '#30363d' : '#d1d5db',
+            color: isDark ? '#c9d1d9' : '#374151',
+          }}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.backgroundColor = isDark ? '#21262d' : '#f3f4f6'
+            e.currentTarget.style.color = isDark ? '#ffffff' : '#111827'
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.backgroundColor = isDark ? '#0d1117' : '#ffffff'
+            e.currentTarget.style.color = isDark ? '#c9d1d9' : '#374151'
+          }}
+          className="w-full py-2 flex items-center justify-center gap-2 border rounded text-xs font-medium transition-colors"
+        >
+          Sign in with Google
+        </button>
+        <button
+          type="button"
+          onClick={() => handleSsoLogin('github-signin')}
+          style={{
+            backgroundColor: isDark ? '#0d1117' : '#ffffff',
+            borderColor: isDark ? '#30363d' : '#d1d5db',
+            color: isDark ? '#c9d1d9' : '#374151',
+          }}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.backgroundColor = isDark ? '#21262d' : '#f3f4f6'
+            e.currentTarget.style.color = isDark ? '#ffffff' : '#111827'
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.backgroundColor = isDark ? '#0d1117' : '#ffffff'
+            e.currentTarget.style.color = isDark ? '#c9d1d9' : '#374151'
+          }}
+          className="w-full py-2 flex items-center justify-center gap-2 border rounded text-xs font-medium transition-colors"
+        >
+          Sign in with GitHub
+        </button>
+      </div>
+
+      <div className="flex items-center gap-2 mb-3">
+        <div style={{ backgroundColor: isDark ? '#30363d' : '#e5e7eb' }} className="flex-1 h-px" />
+        <span style={{ color: isDark ? '#7d8590' : '#9ca3af' }} className="text-[10px] uppercase">or</span>
+        <div style={{ backgroundColor: isDark ? '#30363d' : '#e5e7eb' }} className="flex-1 h-px" />
+      </div>
+
       <form onSubmit={handleSubmit} className="space-y-3">
         <input
           type="text"
@@ -149,7 +220,20 @@ export default function AuthProfile({ isExpanded }: { isExpanded: boolean }) {
 
         <button 
           type="submit"
-          className="w-full py-2 bg-blue-600 dark:bg-[#238636] text-white text-xs font-bold rounded hover:bg-blue-700 dark:hover:bg-[#2ea043] transition-colors"
+          style={{
+            backgroundColor: isDark ? '#0d1117' : '#ffffff',
+            borderColor: isDark ? '#30363d' : '#d1d5db',
+            color: isDark ? '#c9d1d9' : '#374151',
+          }}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.backgroundColor = isDark ? '#21262d' : '#f3f4f6'
+            e.currentTarget.style.color = isDark ? '#ffffff' : '#111827'
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.backgroundColor = isDark ? '#0d1117' : '#ffffff'
+            e.currentTarget.style.color = isDark ? '#c9d1d9' : '#374151'
+          }}
+          className="w-full py-2 border rounded text-xs font-bold transition-colors"
         >
           Sign In
         </button>

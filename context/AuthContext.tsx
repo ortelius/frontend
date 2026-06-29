@@ -21,6 +21,8 @@ interface AuthContextValue {
   /** Returns true if the user belongs to the given org */
   hasOrg: (org: string) => boolean
   isLoading: boolean // 👈 1. ADDED TO INTERFACE TO RESOLVE TYPE ERROR
+  /** Set when redirected back from an SSO provider with ?error=..., e.g. "domain_not_allowed" */
+  ssoError: string | null
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null)
@@ -38,6 +40,7 @@ const getRestEndpoint = async (): Promise<string> => {
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   // undefined = still checking session, null = confirmed not logged in
   const [user, setUser] = useState<AuthUser | null | undefined>(undefined)
+  const [ssoError, setSsoError] = useState<string | null>(null)
 
   const refresh = useCallback(async () => {
     try {
@@ -62,6 +65,25 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     refresh()
+
+    // After an OIDC/OAuth2 redirect (Google, GitHub, ...), the backend
+    // appends ?login=success (cookie already set - just need to pick up the
+    // session) or ?error=<reason> (e.g. domain_not_allowed, invalid_oauth_state)
+    // to the return_to URL. Strip these so a refresh doesn't replay them.
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search)
+      const error = params.get('error')
+      if (error) {
+        setSsoError(error)
+      }
+      if (params.has('login') || params.has('error')) {
+        params.delete('login')
+        params.delete('error')
+        const cleanQuery = params.toString()
+        const cleanUrl = window.location.pathname + (cleanQuery ? `?${cleanQuery}` : '')
+        window.history.replaceState({}, '', cleanUrl)
+      }
+    }
   }, [refresh])
 
   const login = useCallback(async (username: string, password: string): Promise<boolean> => {
@@ -118,7 +140,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   // 3. EXPOSE ISLOADING THROUGH THE VALUE MAP
   return (
-    <AuthContext.Provider value={{ user, setUser, login, logout, refresh, hasRole, hasOrg, isLoading }}>
+    <AuthContext.Provider value={{ user, setUser, login, logout, refresh, hasRole, hasOrg, isLoading, ssoError }}>
       {children}
     </AuthContext.Provider>
   )
