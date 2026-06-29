@@ -1,5 +1,5 @@
 /**
- * POST /api/generate-sbom-pdf
+ * POST /pdf/generate-sbom-pdf
  *
  * Accepts endpoint + release vulnerability data and returns a landscape PDF
  * in the "Federated Component Evidence Details" style (matching sbom.pdf).

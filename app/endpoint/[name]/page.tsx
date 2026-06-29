@@ -123,7 +123,7 @@ export default function EndpointDetailPage() {
         })),
       }
 
-      const res = await fetch('/api/generate-sbom-pdf', {
+      const res = await fetch('/pdf/generate-sbom-pdf', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
