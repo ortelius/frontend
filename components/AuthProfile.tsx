@@ -1,12 +1,17 @@
 'use client'
 
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import { useAuth } from '@/context/AuthContext'
 import { useTheme } from '@/context/ThemeContext'
 import { useRouter } from 'next/navigation'
 import LoginIcon from '@mui/icons-material/Login'
 import LogoutIcon from '@mui/icons-material/Logout'
 import PersonIcon from '@mui/icons-material/Person' // Added icon for profile
+
+interface SsoStatus {
+  google: boolean
+  github: boolean
+}
 
 export default function AuthProfile({ isExpanded }: { isExpanded: boolean }) {
   const { user, login, logout, isLoading, ssoError } = useAuth()
@@ -15,6 +20,32 @@ export default function AuthProfile({ isExpanded }: { isExpanded: boolean }) {
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState(false)
+  // null while loading - render nothing for SSO buttons until we know,
+  // rather than flashing buttons that then disappear.
+  const [ssoStatus, setSsoStatus] = useState<SsoStatus | null>(null)
+
+  useEffect(() => {
+    let cancelled = false
+    const loadStatus = async () => {
+      try {
+        const configRes = await fetch('/config')
+        const config = await configRes.json()
+        const endpoint = config.restEndpoint || 'http://localhost:3000/api/v1'
+        const statusRes = await fetch(`${endpoint}/auth/status`)
+        if (!statusRes.ok) throw new Error('status fetch failed')
+        const status = await statusRes.json()
+        if (!cancelled) {
+          setSsoStatus({ google: !!status.google, github: !!status.github })
+        }
+      } catch {
+        // Backend unreachable or route missing - fail closed, hide SSO
+        // buttons rather than show ones that would 503.
+        if (!cancelled) setSsoStatus({ google: false, github: false })
+      }
+    }
+    loadStatus()
+    return () => { cancelled = true }
+  }, [])
 
   // Kicks off a redirect-based SSO flow. `provider` must match a route
   // mounted on the backend: "google" (and later "authentik", "okta" via the
@@ -141,54 +172,62 @@ export default function AuthProfile({ isExpanded }: { isExpanded: boolean }) {
         </p>
       )}
 
-      <div className="flex flex-col gap-2 mb-3">
-        <button
-          type="button"
-          onClick={() => handleSsoLogin('google')}
-          style={{
-            backgroundColor: isDark ? '#0d1117' : '#ffffff',
-            borderColor: isDark ? '#30363d' : '#d1d5db',
-            color: isDark ? '#c9d1d9' : '#374151',
-          }}
-          onMouseEnter={(e) => {
-            e.currentTarget.style.backgroundColor = isDark ? '#21262d' : '#f3f4f6'
-            e.currentTarget.style.color = isDark ? '#ffffff' : '#111827'
-          }}
-          onMouseLeave={(e) => {
-            e.currentTarget.style.backgroundColor = isDark ? '#0d1117' : '#ffffff'
-            e.currentTarget.style.color = isDark ? '#c9d1d9' : '#374151'
-          }}
-          className="w-full py-2 flex items-center justify-center gap-2 border rounded text-xs font-medium transition-colors"
-        >
-          Sign in with Google
-        </button>
-        <button
-          type="button"
-          onClick={() => handleSsoLogin('github-signin')}
-          style={{
-            backgroundColor: isDark ? '#0d1117' : '#ffffff',
-            borderColor: isDark ? '#30363d' : '#d1d5db',
-            color: isDark ? '#c9d1d9' : '#374151',
-          }}
-          onMouseEnter={(e) => {
-            e.currentTarget.style.backgroundColor = isDark ? '#21262d' : '#f3f4f6'
-            e.currentTarget.style.color = isDark ? '#ffffff' : '#111827'
-          }}
-          onMouseLeave={(e) => {
-            e.currentTarget.style.backgroundColor = isDark ? '#0d1117' : '#ffffff'
-            e.currentTarget.style.color = isDark ? '#c9d1d9' : '#374151'
-          }}
-          className="w-full py-2 flex items-center justify-center gap-2 border rounded text-xs font-medium transition-colors"
-        >
-          Sign in with GitHub
-        </button>
-      </div>
+      {ssoStatus && (ssoStatus.google || ssoStatus.github) && (
+        <>
+          <div className="flex flex-col gap-2 mb-3">
+            {ssoStatus.google && (
+              <button
+                type="button"
+                onClick={() => handleSsoLogin('google')}
+                style={{
+                  backgroundColor: isDark ? '#0d1117' : '#ffffff',
+                  borderColor: isDark ? '#30363d' : '#d1d5db',
+                  color: isDark ? '#c9d1d9' : '#374151',
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.backgroundColor = isDark ? '#21262d' : '#f3f4f6'
+                  e.currentTarget.style.color = isDark ? '#ffffff' : '#111827'
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.backgroundColor = isDark ? '#0d1117' : '#ffffff'
+                  e.currentTarget.style.color = isDark ? '#c9d1d9' : '#374151'
+                }}
+                className="w-full py-2 flex items-center justify-center gap-2 border rounded text-xs font-medium transition-colors"
+              >
+                Sign in with Google
+              </button>
+            )}
+            {ssoStatus.github && (
+              <button
+                type="button"
+                onClick={() => handleSsoLogin('github-signin')}
+                style={{
+                  backgroundColor: isDark ? '#0d1117' : '#ffffff',
+                  borderColor: isDark ? '#30363d' : '#d1d5db',
+                  color: isDark ? '#c9d1d9' : '#374151',
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.backgroundColor = isDark ? '#21262d' : '#f3f4f6'
+                  e.currentTarget.style.color = isDark ? '#ffffff' : '#111827'
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.backgroundColor = isDark ? '#0d1117' : '#ffffff'
+                  e.currentTarget.style.color = isDark ? '#c9d1d9' : '#374151'
+                }}
+                className="w-full py-2 flex items-center justify-center gap-2 border rounded text-xs font-medium transition-colors"
+              >
+                Sign in with GitHub
+              </button>
+            )}
+          </div>
 
-      <div className="flex items-center gap-2 mb-3">
-        <div style={{ backgroundColor: isDark ? '#30363d' : '#e5e7eb' }} className="flex-1 h-px" />
-        <span style={{ color: isDark ? '#7d8590' : '#9ca3af' }} className="text-[10px] uppercase">or</span>
-        <div style={{ backgroundColor: isDark ? '#30363d' : '#e5e7eb' }} className="flex-1 h-px" />
-      </div>
+          <div className="flex items-center gap-2 mb-3">
+            <div style={{ backgroundColor: isDark ? '#30363d' : '#e5e7eb' }} className="flex-1 h-px" />
+            <span style={{ color: isDark ? '#7d8590' : '#9ca3af' }} className="text-[10px] uppercase">or</span>
+            <div style={{ backgroundColor: isDark ? '#30363d' : '#e5e7eb' }} className="flex-1 h-px" />
+          </div>
+        </>
+      )}
 
       <form onSubmit={handleSubmit} className="space-y-3">
         <input
