@@ -365,6 +365,11 @@ export const GET_MTTR_ANALYSIS = `
         oldest_open_critical_days
         backlog_delta
         fixed_within_sla_pct
+        open_cves_release
+        mean_open_age_release
+        open_cves_beyond_sla_pct_release
+        oldest_open_critical_days_release
+        backlog_delta_release
       }
       by_severity {
         severity
@@ -380,6 +385,11 @@ export const GET_MTTR_ANALYSIS = `
         new_detected
         remediated
         open_count
+        open_count_release
+        mean_open_age_release
+        oldest_open_days_release
+        open_beyond_sla_pct_release
+        open_beyond_sla_count_release
       }
       endpoint_impact {
         affected_endpoints_count
@@ -387,6 +397,11 @@ export const GET_MTTR_ANALYSIS = `
           type
           count
         }
+      }
+      release_impact {
+        total_releases_count
+        deployed_releases_count
+        undeployed_releases_count
       }
     }
   }

@@ -24,6 +24,13 @@ export interface DetailedSeverityMetrics {
   remediated: number
   backlog_count: number
   open_count: number
+
+  // Release-clocked open exposure (populated even with zero synced endpoints)
+  open_count_release: number
+  mean_open_age_release: number
+  oldest_open_days_release: number
+  open_beyond_sla_pct_release: number
+  open_beyond_sla_count_release: number
 }
 
 export interface ExecutiveSummary {
@@ -38,6 +45,13 @@ export interface ExecutiveSummary {
   oldest_open_critical_days: number
   backlog_delta: number
   fixed_within_sla_pct?: number
+
+  // Release-clocked equivalents (populated even with zero synced endpoints)
+  open_cves_release: number
+  mean_open_age_release: number
+  open_cves_beyond_sla_pct_release: number
+  oldest_open_critical_days_release: number
+  backlog_delta_release: number
 }
 
 export interface EndpointImpactCount {
@@ -50,10 +64,17 @@ export interface EndpointImpactMetrics {
   post_deployment_cves_by_type: EndpointImpactCount[]
 }
 
+export interface ReleaseImpactMetrics {
+  total_releases_count: number
+  deployed_releases_count: number
+  undeployed_releases_count: number
+}
+
 export interface MTTRAnalysis {
   executive_summary: ExecutiveSummary
   by_severity: DetailedSeverityMetrics[]
   endpoint_impact: EndpointImpactMetrics
+  release_impact: ReleaseImpactMetrics
 }
 
 export interface GetMTTRAnalysisResponse {

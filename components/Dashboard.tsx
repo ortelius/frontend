@@ -278,6 +278,14 @@ export default function Dashboard() {
   
   const [error, setError] = useState<string | null>(null)
 
+  // View mode: 'deployed' uses post-deployment-clocked metrics, 'released' uses
+  // release-clocked metrics (root_introduced_at), 'combined' shows both side by side.
+  // Auto-defaults to 'released' once we know there are no synced endpoints, so
+  // projects like curl/jenkins (released but never deployed by maintainers) don't
+  // just show a wall of misleading zeros.
+  const [viewMode, setViewMode] = useState<'deployed' | 'released' | 'combined'>('deployed')
+  const [viewModeTouched, setViewModeTouched] = useState(false)
+
   // 1. Fetch Metrics (MTTR) - Depends on selectedOrg
   useEffect(() => {
     const fetchMetrics = async () => {
@@ -353,6 +361,21 @@ export default function Dashboard() {
     try {
       return new Date(dateStr).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
     } catch { return dateStr }
+  }
+
+  const noDeployedEndpoints = (mttrData?.release_impact?.deployed_releases_count ?? mttrData?.endpoint_impact?.affected_endpoints_count ?? 0) === 0
+
+  // Auto-default to the release-based view the first time we learn this project
+  // has no synced endpoints, unless the user has already picked a tab themselves.
+  useEffect(() => {
+    if (!viewModeTouched && mttrData && noDeployedEndpoints) {
+      setViewMode('released')
+    }
+  }, [noDeployedEndpoints, viewModeTouched, mttrData])
+
+  const handleViewModeChange = (mode: 'deployed' | 'released' | 'combined') => {
+    setViewModeTouched(true)
+    setViewMode(mode)
   }
 
   const ExecutiveCard = ({ title, value, subValue, icon: Icon, colorClass, tooltip, compliance }: any) => (
@@ -465,7 +488,45 @@ export default function Dashboard() {
               </div>
             </div>
           </div>
+
+          <div className="inline-flex items-center gap-1 bg-gray-100 border border-gray-200 rounded-lg p-1">
+            <button
+              onClick={() => handleViewModeChange('deployed')}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold transition-colors ${viewMode === 'deployed' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+            >
+              <RouterIcon style={{ fontSize: 14 }} />
+              Deployed
+            </button>
+            <button
+              onClick={() => handleViewModeChange('released')}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold transition-colors ${viewMode === 'released' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+            >
+              <TimerIcon style={{ fontSize: 14 }} />
+              Released
+            </button>
+            <button
+              onClick={() => handleViewModeChange('combined')}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold transition-colors ${viewMode === 'combined' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+            >
+              <CheckCircleIcon style={{ fontSize: 14 }} />
+              Combined
+            </button>
+          </div>
         </div>
+
+        {noDeployedEndpoints && (
+          <div className="flex items-center gap-2 -mt-4 text-xs text-gray-500 bg-blue-50 border border-blue-100 rounded-lg px-3 py-2">
+            <WarningAmberIcon style={{ fontSize: 14 }} className="text-blue-500" />
+            <span>
+              {mttrData.release_impact ? (
+                <>{mttrData.release_impact.deployed_releases_count} of {mttrData.release_impact.total_releases_count} tracked releases have synced endpoints.</>
+              ) : (
+                <>0 of these releases have synced endpoints.</>
+              )}{' '}
+              Showing release-based metrics — clock starts at <em>root_introduced_at</em>, the release a CVE first appeared in, not deployment date.
+            </span>
+          </div>
+        )}
 
         <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-4">
           <ExecutiveCard 
@@ -482,53 +543,91 @@ export default function Dashboard() {
               </span>
             }
           />
-          <ExecutiveCard 
-            title="Post-Deploy CVEs" 
-            value={executive_summary.post_deployment_cves}
-            subValue="active open"
-            icon={RouterIcon}
-            colorClass="text-orange-600"
-            compliance={<a href="#nist-800-218-rv1" className="text-blue-600 underline hover:text-blue-800">NIST 800-218 RV.1</a>}
-            tooltip={
-              <span>
-                Currently open vulnerabilities affecting deployed endpoints.<br/>
-                <strong>Calculation:</strong> Σ Open CVEs where <em>Disclosure Date</em> &gt; <em>Deployment Date</em>.
-              </span>
-            }
-          />
-          <ExecutiveCard 
-            title="MTTR (Pre + Post Deploy)" 
-            value={`${executive_summary.mttr_all.toFixed(1)}d`}
-            subValue="avg remediation"
-            icon={ScheduleIcon}
-            colorClass="text-blue-600"
-            compliance={<><a href="#nist-800-218-rv2" className="text-blue-600 underline hover:text-blue-800">NIST 800-218 RV.2</a><br/><a href="#nist-800-53-si2" className="text-blue-600 underline hover:text-blue-800">NIST 800-53 SI-2</a></>}
-            tooltip={
-              <span>
-                Mean Time To Remediate for all endpoint CVEs (pre- and post-deployment) fixed in the last 180 days.<br/>
-                <strong>Calculation:</strong> Σ(<em>Fix Date</em> - <em>First Introduced Date</em>) / Total Fixed CVEs.<br/>
-                Clock starts at <em>root_introduced_at</em> — the first known version where the CVE was present, not re-detection on upgrade.
-              </span>
-            }
-          />
-          <ExecutiveCard 
-            title="MTTR (Post-Deploy)" 
-            value={`${executive_summary.mttr_post_deployment.toFixed(1)}d`}
-            subValue=""
-            icon={AccessTimeIcon}
-            colorClass="text-indigo-600"
-            compliance={<><a href="#nist-800-218-rv2" className="text-blue-600 underline hover:text-blue-800">NIST 800-218 RV.2</a><br/><a href="#nist-800-190-s33" className="text-blue-600 underline hover:text-blue-800">NIST 800-190 §3.3</a></>}
-            tooltip={
-              <span>
-                Mean Time To Remediate for Post-Deployment CVEs only.<br/>
-                <strong>Calculation:</strong> Σ(<em>Fix Date</em> - <em>First Introduced Date</em>) / Total Fixed Post-Deploy CVEs.<br/>
-                Clock starts at <em>root_introduced_at</em> — the first known version where the CVE was present, not re-detection on upgrade.
-              </span>
-            }
-          />
+          {viewMode !== 'released' ? (
+            <ExecutiveCard 
+              title="Post-Deploy CVEs" 
+              value={executive_summary.post_deployment_cves}
+              subValue="active open"
+              icon={RouterIcon}
+              colorClass="text-orange-600"
+              compliance={<a href="#nist-800-218-rv1" className="text-blue-600 underline hover:text-blue-800">NIST 800-218 RV.1</a>}
+              tooltip={
+                <span>
+                  Currently open vulnerabilities affecting deployed endpoints.<br/>
+                  <strong>Calculation:</strong> Σ Open CVEs where <em>Disclosure Date</em> &gt; <em>Deployment Date</em>.
+                </span>
+              }
+            />
+          ) : (
+            <ExecutiveCard 
+              title="Open at Release" 
+              value={executive_summary.open_cves_release}
+              subValue="active open"
+              icon={RouterIcon}
+              colorClass="text-orange-600"
+              compliance={<a href="#nist-800-218-rv1" className="text-blue-600 underline hover:text-blue-800">NIST 800-218 RV.1</a>}
+              tooltip={
+                <span>
+                  Currently open vulnerabilities present in published releases, regardless of whether any release has been deployed.<br/>
+                  <strong>Calculation:</strong> Total New CVEs − Total Fixed CVEs, within the rolling 180-day window.
+                </span>
+              }
+            />
+          )}
+          {viewMode !== 'released' && (
+            <ExecutiveCard 
+              title="MTTR (Pre + Post Deploy)" 
+              value={`${executive_summary.mttr_all.toFixed(1)}d`}
+              subValue="avg remediation"
+              icon={ScheduleIcon}
+              colorClass="text-blue-600"
+              compliance={<><a href="#nist-800-218-rv2" className="text-blue-600 underline hover:text-blue-800">NIST 800-218 RV.2</a><br/><a href="#nist-800-53-si2" className="text-blue-600 underline hover:text-blue-800">NIST 800-53 SI-2</a></>}
+              tooltip={
+                <span>
+                  Mean Time To Remediate for all endpoint CVEs (pre- and post-deployment) fixed in the last 180 days.<br/>
+                  <strong>Calculation:</strong> Σ(<em>Fix Date</em> - <em>First Introduced Date</em>) / Total Fixed CVEs.<br/>
+                  Clock starts at <em>root_introduced_at</em> — the first known version where the CVE was present, not re-detection on upgrade.
+                </span>
+              }
+            />
+          )}
+          {viewMode !== 'deployed' && (
+            <ExecutiveCard 
+              title="MTTR (Release)" 
+              value={`${executive_summary.mttr_all.toFixed(1)}d`}
+              subValue="avg remediation"
+              icon={ScheduleIcon}
+              colorClass="text-purple-600"
+              compliance={<><a href="#nist-800-218-rv2" className="text-blue-600 underline hover:text-blue-800">NIST 800-218 RV.2</a><br/><a href="#nist-800-53-si2" className="text-blue-600 underline hover:text-blue-800">NIST 800-53 SI-2</a></>}
+              tooltip={
+                <span>
+                  Mean Time To Remediate clocked from the release a CVE was first introduced in, independent of whether it was ever deployed.<br/>
+                  <strong>Calculation:</strong> Σ(<em>Fix Date</em> - <em>First Introduced Date</em>) / Total Fixed CVEs.<br/>
+                  Clock starts at <em>root_introduced_at</em> — the release where the CVE first appeared.
+                </span>
+              }
+            />
+          )}
+          {viewMode !== 'released' && (
+            <ExecutiveCard 
+              title="MTTR (Post-Deploy)" 
+              value={`${executive_summary.mttr_post_deployment.toFixed(1)}d`}
+              subValue=""
+              icon={AccessTimeIcon}
+              colorClass="text-indigo-600"
+              compliance={<><a href="#nist-800-218-rv2" className="text-blue-600 underline hover:text-blue-800">NIST 800-218 RV.2</a><br/><a href="#nist-800-190-s33" className="text-blue-600 underline hover:text-blue-800">NIST 800-190 §3.3</a></>}
+              tooltip={
+                <span>
+                  Mean Time To Remediate for Post-Deployment CVEs only.<br/>
+                  <strong>Calculation:</strong> Σ(<em>Fix Date</em> - <em>First Introduced Date</em>) / Total Fixed Post-Deploy CVEs.<br/>
+                  Clock starts at <em>root_introduced_at</em> — the first known version where the CVE was present, not re-detection on upgrade.
+                </span>
+              }
+            />
+          )}
           <ExecutiveCard 
             title="% Open > SLA" 
-            value={`${executive_summary.open_cves_beyond_sla_pct.toFixed(1)}%`}
+            value={`${(viewMode === 'released' ? executive_summary.open_cves_beyond_sla_pct_release : executive_summary.open_cves_beyond_sla_pct).toFixed(1)}%`}
             subValue="compliance risk"
             icon={WarningAmberIcon}
             colorClass="text-yellow-600"
@@ -536,7 +635,8 @@ export default function Dashboard() {
             tooltip={
               <span>
                 Percentage of open CVEs exceeding their severity-based SLA.<br/>
-                <strong>Calculation:</strong> (Count of Open CVEs &gt; SLA Days / Total Open CVEs) * 100.
+                <strong>Calculation:</strong> (Count of Open CVEs &gt; SLA Days / Total Open CVEs) * 100.<br/>
+                {viewMode === 'released' && <span>Clock basis: release date (<em>root_introduced_at</em>), since no endpoints are deployed for this project.</span>}
               </span>
             }
           />
@@ -557,13 +657,15 @@ export default function Dashboard() {
                   <tr>
                     <th className="px-6 py-3">Severity</th>
                     <th className="px-6 py-3 text-center">
-                      <div>MTTR (Days)</div>
+                      <div>{viewMode === 'released' ? 'MTTR (Release)' : 'MTTR (Days)'}</div>
                       <div className="text-xs font-normal text-gray-400 mt-1">Σ(Fix - Detect) / Fixed</div>
                     </th>
-                    <th className="px-6 py-3 text-center">
-                      <div>MTTR (Post)</div>
-                      <div className="text-xs font-normal text-gray-400 mt-1">Σ(Fix - Detect) / Post-deploy fixed</div>
-                    </th>
+                    {viewMode !== 'released' && (
+                      <th className="px-6 py-3 text-center">
+                        <div>MTTR (Post)</div>
+                        <div className="text-xs font-normal text-gray-400 mt-1">Σ(Fix - Detect) / Post-deploy fixed</div>
+                      </th>
+                    )}
                     <th className="px-6 py-3 text-center">
                       <div>% Fixed in SLA</div>
                       <div className="text-xs font-normal text-gray-400 mt-1">(Fixed ≤ SLA / Total) × 100</div>
@@ -590,16 +692,18 @@ export default function Dashboard() {
                         {row.severity}
                       </td>
                       <td className="px-6 py-4 text-center">{row.mttr.toFixed(1)}</td>
-                      <td className="px-6 py-4 text-center font-medium text-gray-900">{row.mttr_post_deployment.toFixed(1)}</td>
+                      {viewMode !== 'released' && (
+                        <td className="px-6 py-4 text-center font-medium text-gray-900">{row.mttr_post_deployment.toFixed(1)}</td>
+                      )}
                       <td className="px-6 py-4 text-center">
                         <span className={`px-2 py-1 rounded-full text-xs font-bold ${row.fixed_within_sla_pct >= 80 ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'}`}>
                           {row.fixed_within_sla_pct.toFixed(0)}%
                         </span>
                       </td>
-                      <td className="px-6 py-4 text-center">{row.mean_open_age.toFixed(1)}d</td>
-                      <td className="px-6 py-4 text-center text-gray-500">{row.oldest_open_days.toFixed(0)}d</td>
+                      <td className="px-6 py-4 text-center">{(viewMode === 'released' ? row.mean_open_age_release : row.mean_open_age).toFixed(1)}d</td>
+                      <td className="px-6 py-4 text-center text-gray-500">{(viewMode === 'released' ? row.oldest_open_days_release : row.oldest_open_days).toFixed(0)}d</td>
                       <td className="px-6 py-4 text-center font-bold text-red-600">
-                        {row.open_beyond_sla_pct.toFixed(1)}%
+                        {(viewMode === 'released' ? row.open_beyond_sla_pct_release : row.open_beyond_sla_pct).toFixed(1)}%
                       </td>
                     </tr>
                   ))}
@@ -622,9 +726,9 @@ export default function Dashboard() {
                 <p className="text-sm text-blue-800 font-bold">Backlog Delta</p>
                 <p className="text-xs text-blue-600">New - Fixed</p>
               </div>
-              <div className={`text-3xl font-bold ${executive_summary.backlog_delta > 0 ? 'text-red-600' : 'text-green-600'} flex items-center`}>
-                {executive_summary.backlog_delta > 0 ? <TrendingUpIcon className="mr-1"/> : <TrendingDownIcon className="mr-1"/>}
-                {Math.abs(executive_summary.backlog_delta)}
+              <div className={`text-3xl font-bold ${(viewMode === 'released' ? executive_summary.backlog_delta_release : executive_summary.backlog_delta) > 0 ? 'text-red-600' : 'text-green-600'} flex items-center`}>
+                {(viewMode === 'released' ? executive_summary.backlog_delta_release : executive_summary.backlog_delta) > 0 ? <TrendingUpIcon className="mr-1"/> : <TrendingDownIcon className="mr-1"/>}
+                {Math.abs(viewMode === 'released' ? executive_summary.backlog_delta_release : executive_summary.backlog_delta)}
               </div>
             </div>
 
