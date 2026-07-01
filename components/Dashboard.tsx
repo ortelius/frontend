@@ -442,73 +442,78 @@ export default function Dashboard() {
     <div className="flex h-full relative">
       <div className="flex-1 p-6 bg-gray-50 h-full space-y-8 font-sans overflow-y-auto">
         
-        <div className="flex justify-between items-end">
-          <div>
-            <h1 className="text-2xl font-bold text-gray-900">Post-Deployment OSS Vulnerability Dashboard</h1>
-            <div className="flex items-center gap-2 mt-1">
-              <span className="px-2 py-0.5 bg-blue-100 text-blue-800 rounded text-xs font-semibold border border-blue-200">Rolling 180 Days</span>
+        <div>
+          <div className="flex items-start justify-between">
+            <h1 className="text-2xl font-bold text-gray-900">
+              {viewMode === 'released'
+                ? 'Post-Release OSS Vulnerability Dashboard'
+                : 'Post-Deployment OSS Vulnerability Dashboard'}
+            </h1>
+          </div>
+
+          <div className="flex items-center gap-3 mt-2">
+            <div className="inline-flex items-center gap-1 bg-gray-100 border border-gray-200 rounded-lg p-1">
+              <button
+                onClick={() => handleViewModeChange('deployed')}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold transition-colors ${viewMode === 'deployed' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+              >
+                <RouterIcon style={{ fontSize: 14 }} />
+                Deployed
+              </button>
+              <button
+                onClick={() => handleViewModeChange('released')}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold transition-colors ${viewMode === 'released' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+              >
+                <TimerIcon style={{ fontSize: 14 }} />
+                Released
+              </button>
+            </div>
+
+            <span className="px-2 py-0.5 bg-blue-100 text-blue-800 rounded text-xs font-semibold border border-blue-200">Rolling 180 Days</span>
+            
+            <div className="relative group">
+              <span className="px-2 py-0.5 bg-purple-100 text-purple-800 rounded text-xs font-semibold border border-purple-200 cursor-help flex items-center gap-1">
+                <span>NIST Recommended SLA Policy</span>
+                <span className="w-1 h-1 rounded-full bg-purple-400"></span>
+                <span className="font-normal opacity-80">Crit 15d • High 30d • Med 90d • Low 365d</span>
+              </span>
               
-              <div className="relative group">
-                <span className="px-2 py-0.5 bg-purple-100 text-purple-800 rounded text-xs font-semibold border border-purple-200 cursor-help flex items-center gap-1">
-                  <span>NIST Recommended SLA Policy</span>
-                  <span className="w-1 h-1 rounded-full bg-purple-400"></span>
-                  <span className="font-normal opacity-80">Crit 15d • High 30d • Med 90d • Low 365d</span>
-                </span>
+              <div className="absolute left-0 top-full mt-2 w-72 bg-white border border-gray-200 shadow-xl rounded-lg p-4 z-50 invisible group-hover:visible opacity-0 group-hover:opacity-100 transition-all duration-200">
+                <div className="flex items-center gap-2 mb-3 pb-2 border-b border-gray-100">
+                  <ScheduleIcon fontSize="small" className="text-purple-600" />
+                  <h4 className="font-bold text-gray-900 text-sm">NIST Recommended Remediation Targets</h4>
+                </div>
                 
-                <div className="absolute left-0 top-full mt-2 w-72 bg-white border border-gray-200 shadow-xl rounded-lg p-4 z-50 invisible group-hover:visible opacity-0 group-hover:opacity-100 transition-all duration-200">
-                  <div className="flex items-center gap-2 mb-3 pb-2 border-b border-gray-100">
-                    <ScheduleIcon fontSize="small" className="text-purple-600" />
-                    <h4 className="font-bold text-gray-900 text-sm">NIST Recommended Remediation Targets</h4>
+                <div className="grid grid-cols-2 gap-y-2 text-xs">
+                  <div className="col-span-1 font-semibold text-gray-400 uppercase tracking-wider text-[10px]">Severity</div>
+                  <div className="col-span-1 text-right font-semibold text-gray-400 uppercase tracking-wider text-[10px]">Standard SLA</div>
+
+                  <div className="col-span-1 font-bold text-gray-800 flex items-center gap-1.5">
+                    <span className="w-2 h-2 rounded-full bg-red-600"></span> Critical
                   </div>
-                  
-                  <div className="grid grid-cols-2 gap-y-2 text-xs">
-                    <div className="col-span-1 font-semibold text-gray-400 uppercase tracking-wider text-[10px]">Severity</div>
-                    <div className="col-span-1 text-right font-semibold text-gray-400 uppercase tracking-wider text-[10px]">Standard SLA</div>
+                  <div className="col-span-1 text-right text-gray-600">15 days</div>
 
-                    <div className="col-span-1 font-bold text-gray-800 flex items-center gap-1.5">
-                      <span className="w-2 h-2 rounded-full bg-red-600"></span> Critical
-                    </div>
-                    <div className="col-span-1 text-right text-gray-600">15 days</div>
-
-                    <div className="col-span-1 font-bold text-gray-800 flex items-center gap-1.5">
-                      <span className="w-2 h-2 rounded-full bg-orange-500"></span> High
-                    </div>
-                    <div className="col-span-1 text-right text-gray-600">30 days</div>
-
-                    <div className="col-span-1 font-medium text-gray-700 flex items-center gap-1.5">
-                      <span className="w-2 h-2 rounded-full bg-yellow-500"></span> Medium
-                    </div>
-                    <div className="col-span-1 text-right text-gray-600">90 days</div>
-
-                    <div className="col-span-1 font-medium text-gray-700 flex items-center gap-1.5">
-                      <span className="w-2 h-2 rounded-full bg-blue-500"></span> Low
-                    </div>
-                    <div className="col-span-1 text-right text-gray-600">365 days</div>
+                  <div className="col-span-1 font-bold text-gray-800 flex items-center gap-1.5">
+                    <span className="w-2 h-2 rounded-full bg-orange-500"></span> High
                   </div>
-                  
-                  <div className="mt-3 pt-2 border-t border-gray-100 text-[10px] text-gray-400 italic">
-                    Per NIST SP 800-40 Rev. 4. Clock starts at first detection on a deployed endpoint.
+                  <div className="col-span-1 text-right text-gray-600">30 days</div>
+
+                  <div className="col-span-1 font-medium text-gray-700 flex items-center gap-1.5">
+                    <span className="w-2 h-2 rounded-full bg-yellow-500"></span> Medium
                   </div>
+                  <div className="col-span-1 text-right text-gray-600">90 days</div>
+
+                  <div className="col-span-1 font-medium text-gray-700 flex items-center gap-1.5">
+                    <span className="w-2 h-2 rounded-full bg-blue-500"></span> Low
+                  </div>
+                  <div className="col-span-1 text-right text-gray-600">365 days</div>
+                </div>
+                
+                <div className="mt-3 pt-2 border-t border-gray-100 text-[10px] text-gray-400 italic">
+                  Per NIST SP 800-40 Rev. 4. Clock starts at first detection on a deployed endpoint.
                 </div>
               </div>
             </div>
-          </div>
-
-          <div className="inline-flex items-center gap-1 bg-gray-100 border border-gray-200 rounded-lg p-1">
-            <button
-              onClick={() => handleViewModeChange('deployed')}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold transition-colors ${viewMode === 'deployed' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
-            >
-              <RouterIcon style={{ fontSize: 14 }} />
-              Deployed
-            </button>
-            <button
-              onClick={() => handleViewModeChange('released')}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold transition-colors ${viewMode === 'released' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
-            >
-              <TimerIcon style={{ fontSize: 14 }} />
-              Released
-            </button>
           </div>
         </div>
 
