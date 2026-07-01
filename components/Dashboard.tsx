@@ -446,8 +446,8 @@ export default function Dashboard() {
           <div className="flex items-start justify-between">
             <h1 className="text-2xl font-bold text-gray-900">
               {viewMode === 'released'
-                ? 'Post-Release OSS Vulnerability Dashboard'
-                : 'Post-Deployment OSS Vulnerability Dashboard'}
+                ? 'Post-Release OSS Vulnerability Posture'
+                : 'Post-Deployment OSS Vulnerability Posture'}
             </h1>
           </div>
 
