@@ -279,11 +279,13 @@ export default function Dashboard() {
   const [error, setError] = useState<string | null>(null)
 
   // View mode: 'deployed' uses post-deployment-clocked metrics, 'released' uses
-  // release-clocked metrics (root_introduced_at), 'combined' shows both side by side.
+  // View mode: 'deployed' uses post-deployment-clocked metrics, 'released' uses
+  // release-clocked metrics (root_introduced_at).
+  // Auto-defaults to 'released' when no synced endpoints exist.
   // Auto-defaults to 'released' once we know there are no synced endpoints, so
   // projects like curl/jenkins (released but never deployed by maintainers) don't
   // just show a wall of misleading zeros.
-  const [viewMode, setViewMode] = useState<'deployed' | 'released' | 'combined'>('deployed')
+  const [viewMode, setViewMode] = useState<'deployed' | 'released'>('deployed')
   const [viewModeTouched, setViewModeTouched] = useState(false)
 
   // 1. Fetch Metrics (MTTR) - Depends on selectedOrg
@@ -291,6 +293,7 @@ export default function Dashboard() {
     const fetchMetrics = async () => {
       try {
         setLoadingMttr(true)
+        setMttrData(null)  // Clear immediately so cards don't show stale org data
         const response = await graphqlQuery<GetMTTRAnalysisResponse>(
           GET_MTTR_ANALYSIS, 
           { days: 180, org: selectedOrg || "" }
@@ -311,6 +314,7 @@ export default function Dashboard() {
     const fetchGlobalStatus = async () => {
       try {
         setLoadingGlobalStatus(true)
+        setGlobalStatus(null)  // Clear immediately so status cards don't show stale org data
         const response = await graphqlQuery<GetDashboardGlobalStatusResponse>(
           GET_DASHBOARD_GLOBAL_STATUS,
           { org: selectedOrg || "" }
@@ -330,6 +334,7 @@ export default function Dashboard() {
     const fetchTrend = async () => {
       try {
         setLoadingTrend(true)
+        setTrendData([])  // Clear immediately so chart doesn't show stale org data
         const response = await graphqlQuery<GetVulnerabilityTrendResponse>(
           GET_DASHBOARD_VULNERABILITY_TREND,
           { days: 180, org: selectedOrg || "" }
@@ -373,7 +378,7 @@ export default function Dashboard() {
     }
   }, [noDeployedEndpoints, viewModeTouched, mttrData])
 
-  const handleViewModeChange = (mode: 'deployed' | 'released' | 'combined') => {
+  const handleViewModeChange = (mode: 'deployed' | 'released') => {
     setViewModeTouched(true)
     setViewMode(mode)
   }
@@ -504,13 +509,6 @@ export default function Dashboard() {
               <TimerIcon style={{ fontSize: 14 }} />
               Released
             </button>
-            <button
-              onClick={() => handleViewModeChange('combined')}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold transition-colors ${viewMode === 'combined' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
-            >
-              <CheckCircleIcon style={{ fontSize: 14 }} />
-              Combined
-            </button>
           </div>
         </div>
 
@@ -591,7 +589,7 @@ export default function Dashboard() {
               }
             />
           )}
-          {viewMode !== 'deployed' && (
+          {viewMode === 'released' && (
             <ExecutiveCard 
               title="MTTR (Release)" 
               value={`${executive_summary.mttr_all.toFixed(1)}d`}
