@@ -10,29 +10,32 @@ Ortelius provides a production-grade security posture dashboard focused on **pos
 ### Connecting Your Repositories
 
 1. **Sign Up**: Click "Create New Account" on the login page and create an account with your organization details
-   
+
    ![Create New Account Link](create-account.png)
-2. **Activate Account**: Check your email for the activation link and set your password
-3. **Connect GitHub**: 
-   - Go to your Profile page
-   - Click "Connect GitHub Account" in the GitHub Integration section
-   - Authorize the Ortelius GitHub App
-   - Select which repositories to grant access to
-4. **Configure Repository Access**:
-   - Visit [GitHub Settings > Applications > Installed GitHub Apps](https://github.com/settings/installations)
-   - Click "Configure" next to the Ortelius app
-   - Under "Repository access", select the repositories you want to track
-   - Click "Save"
-5. **View Your Data**: Your GitHub releases and their security posture will now appear in the Organizations and Dashboard views
+2. **Activate Account**: Check your email for the activation link and set your password — this lands you on the **Welcome** page (`/welcome`)
+3. **You already have data**: The Welcome page auto-adds a few popular public repos to your Favorites so there's real vulnerability data to explore immediately — no action needed for this step
+4. **Connect GitHub** *(recommended, for your own repos)*:
+   - On the Welcome page, click **Connect GitHub Account**
+   - Authorize the Ortelius GitHub App and choose which repositories (public or private) to grant it access to
+   - Back in Ortelius, check the boxes next to the repos you want and click **Import Selected**
+5. **Or favorite a public repo by name** *(optional)*: search by name or `owner/repo` (GitHub or GitLab) and click **Add to Favorites** — useful for public repos you don't have GitHub access to yourself
+6. **Configure Repository Access later**: to grant the GitHub App access to more repos after the fact, visit [GitHub Settings > Applications > Installed GitHub Apps](https://github.com/settings/installations), click **Configure** next to the Ortelius app, and adjust repository access
+7. **View Your Data**: Click **Go to Organizations** at the bottom of the Welcome page — your tracked repos and their security posture appear in the Organizations and Dashboard views
+
+> The Profile page also has a **GitHub Integration** panel for checking connection status and viewing which repos the App can currently see, but repo import/selection happens on the Welcome page, not Profile.
 
 ### What Gets Tracked
 
-Once connected, the system automatically:
-- Monitors your GitHub releases and container deployments
-- Scans for vulnerabilities using SBOM (Software Bill of Materials) data
-- Tracks OpenSSF Scorecard metrics for repository security health
-- Provides post-deployment vulnerability detection and remediation tracking
-- Generates compliance-ready reports aligned with NIST frameworks
+Connecting a repo (via GitHub App import or "favorite by name") creates release records — one per GitHub release tag — and, for successful GitHub Actions workflow runs, an endpoint + sync record so the release shows up as deployed. On its own, clicking through this UI flow **does not** give you vulnerability data immediately: no SBOM is attached at connect time, no OpenSSF Scorecard is fetched, and no container image is inspected as part of the click-through.
+
+SBOM data (needed for vulnerability matching) reaches a release one of two ways:
+- **Automatically**, if your deployment runs the [`relscanner-job`](https://github.com/ortelius/relscanner-job) CronJob — it periodically scans every repo connected via the flows above (GitHub App installs, org-tracked repos, and public favorites) and attaches an SBOM via OCI attestations, Cosign, GitHub Release assets, or Syft/cdxgen generation, plus an OpenSSF Scorecard result. This typically runs on a 15-minute schedule, so give it a little time after connecting a repo.
+- **Manually**, from a CI pipeline step (Syft, Trivy, or any CycloneDX-compatible tool) calling the backend's `POST /api/v1/releases` API directly. See the [backend Implementation Guide](https://github.com/ortelius/ortelius/blob/main/docs/implementation.md#releases) for the exact payload.
+
+Once SBOM data is present, Ortelius:
+- Matches components against CVEs from the OSV.dev database (refreshed every 15 minutes)
+- Tracks post-deployment vulnerability detection and remediation over time
+- Surfaces compliance-ready metrics aligned with NIST frameworks
 
 ---
 
@@ -49,13 +52,17 @@ Once connected, the system automatically:
 - **Environment**: Production, Staging, Development, Test
 - **Endpoint Type**: Kubernetes, Docker, VM, Serverless
 
+### Org Visibility
+- **My Orgs**: Repos/releases under organizations you belong to
+- **Public**: Publicly tracked repos, regardless of org membership
+
 ---
 
 ## Key Features
 
 ### 🏢 Multi-Organization Support
 - Organization-level isolation and access control
-- Role-based permissions (admin, viewer)
+- Role-based permissions (owner, admin, editor, viewer)
 - Public and private repository tracking
 
 ### 🎯 Comprehensive Dashboard
@@ -71,6 +78,10 @@ Once connected, the system automatically:
 - **Synced Endpoints**: Where software is running (K8s, Docker, VMs)
 - **Project Releases**: Vulnerability tracking by release version
 - **Vulnerabilities**: CVE database with CVSS scoring
+- **Mitigations**: Actionable remediation view of open vulnerabilities
+- **Profile**: Account details, password change, and GitHub App connection status
+- **Welcome**: First-run onboarding — connect GitHub, import repos, or favorite public repos by name
+- **Signup / Invitation / Forgot Password**: Self-service account onboarding flows
 
 ### 🛡️ Security Intelligence
 - OpenSSF Scorecard integration
@@ -81,6 +92,7 @@ Once connected, the system automatically:
 
 ### 📊 Export & Reporting
 - SVG export for any dashboard component
+- PDF export, including SBOM report generation
 - Compliance-ready documentation
 - Detailed vulnerability breakdowns
 - Historical trend visualization
@@ -134,14 +146,18 @@ This dashboard is designed to support compliance with:
 ## Authentication & Authorization
 
 ### User Roles
-- **Admin**: Full system access, user management, organization creation
+- **Owner**: Full access, including organization deletion
+- **Admin**: Full access plus user management
+- **Editor**: Can upload releases, upload SBOMs, and sync endpoints
 - **Viewer**: Read-only access to assigned organizations
 
 ### Authentication Flow
-1. User registration with email verification
-2. Admin approval and organization assignment
-3. Password-based login with session management
-4. Optional GitHub OAuth integration for repository access
+1. User registration with email verification (GitOps-backed invitation flow), or direct creation by an admin
+2. Password-based login with session management (JWT cookie)
+3. Optional SSO: "Sign in with Google" and "Sign in with GitHub" buttons, shown or hidden based on what the backend reports as configured (`GET /auth/status`)
+4. Optional GitHub App connection (separate from GitHub sign-in) for repository onboarding, from the Welcome or Profile page
+
+> **Note:** The "Forgot Password" flow (`/auth/forgot-password`) currently calls a backend stub that returns success without actually sending a reset email — password resets aren't functional yet end-to-end.
 
 ---
 
@@ -170,8 +186,8 @@ The frontend communicates with the backend via GraphQL queries for:
 
 We welcome contributions! Please see:
 - GitHub Issues: [https://github.com/ortelius/frontend/issues](https://github.com/ortelius/frontend/issues)
-- Contributing Guide: `CONTRIBUTING.md`
-- Code of Conduct: `CODE_OF_CONDUCT.md`
+
+> Note: this repo does not currently include a `CONTRIBUTING.md`, `CODE_OF_CONDUCT.md`, or `LICENSE` file locally — don't assume these paths exist when linking to them; check the [ortelius org on GitHub](https://github.com/ortelius) for org-wide versions.
 
 - Website: [https://ortelius.io](https://ortelius.io)
 - GitHub: [https://github.com/ortelius](https://github.com/ortelius)
@@ -184,7 +200,6 @@ We welcome contributions! Please see:
 ### Related Repositories
 
 - **Backend API**: [https://github.com/ortelius/ortelius](https://github.com/ortelius/ortelius)
-- **Ortelius Platform**: [https://github.com/ortelius/ortelius](https://github.com/ortelius/ortelius)
 
 ### Local Development
 
@@ -201,8 +216,11 @@ npm install
 
 3. **Configure environment**:
 ```bash
-cp .env.example .env.local
-# Edit .env.local with your backend endpoints
+# No .env.example is checked into the repo — create .env.local yourself:
+cat > .env.local << 'EOF'
+RUNTIME_GRAPHQL_ENDPOINT=http://localhost:3000/api/v1/graphql
+RUNTIME_REST_ENDPOINT=http://localhost:3000/api/v1
+EOF
 ```
 
 4. **Run development server**:
@@ -221,17 +239,23 @@ http://localhost:4000
 # Backend API Configuration
 RUNTIME_GRAPHQL_ENDPOINT=http://localhost:3000/api/v1/graphql
 RUNTIME_REST_ENDPOINT=http://localhost:3000/api/v1
-
-# GitHub OAuth (for repository integration)
-GITHUB_CLIENT_ID=your_github_client_id
-GITHUB_CLIENT_SECRET=your_github_client_secret
 ```
+
+> `RUNTIME_GRAPHQL_ENDPOINT` and `RUNTIME_REST_ENDPOINT` are read server-side per-request via the `/config` route (not baked in at build time), so they can also be set at container start (e.g. `docker run -e RUNTIME_REST_ENDPOINT=...`) without rebuilding the image.
+
+> **Note:** `lib/auth/factory.ts` (`createAuthProvider()` / `NEXT_PUBLIC_AUTH_PROVIDER`) exists in the codebase but is not actually wired up — `app/layout.tsx` uses `context/AuthContext.tsx`'s `AuthProvider` directly, which talks to the backend REST API and is not configurable via this factory. Setting `NEXT_PUBLIC_AUTH_PROVIDER` currently has no effect; treat the factory as unused scaffolding rather than a supported setting.
+
+> GitHub App credentials (`GITHUB_CLIENT_ID`, `GITHUB_CLIENT_SECRET`, etc.) are configured on the **backend**, not the frontend — see the [backend repo's architecture guide](https://github.com/ortelius/ortelius/blob/main/docs/architecture.md#environment-variables-reference).
+
+**SSO login buttons** ("Sign in with Google" / "Sign in with GitHub", shown on the login form) are rendered based on what `GET /auth/status` reports the backend has configured, and redirect straight to the backend's OAuth/OIDC routes. No frontend env vars are needed to enable them; configure `GITHUB_OAUTH_CLIENT_ID`/`GITHUB_OAUTH_CLIENT_SECRET` and `GOOGLE_OIDC_CLIENT_ID`/etc. on the **backend** instead. The backend's OIDC support is provider-agnostic (Authentik and Okta can be registered the same way as Google), but the frontend currently only renders buttons for Google and GitHub.
+
+The dev server runs on port `4000` (`npm run dev`); the production server (`npm run start`) runs on port `8080`.
 
 ---
 
 ## License
 
-Apache License 2.0 - See `LICENSE` file for details.
+Apache License 2.0. No `LICENSE` file is currently checked into this repo — see the [backend repo's LICENSE](https://github.com/ortelius/ortelius/blob/main/LICENSE) for the org's Apache 2.0 terms, or confirm with the maintainers before relying on this for compliance purposes.
 
 ---
 
