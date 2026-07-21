@@ -19,6 +19,7 @@ import HubIcon from '@mui/icons-material/Hub'
 import HourglassEmptyIcon from '@mui/icons-material/HourglassEmpty'
 import StarIcon from '@mui/icons-material/Star'
 import StarBorderIcon from '@mui/icons-material/StarBorder'
+import SettingsIcon from '@mui/icons-material/Settings'
 
 // endpoint_type_counts is supplied by the backend once the scanner fix lands.
 // Each entry is { label: string, count: number } e.g. { label: "kubernetes", count: 12 }.
@@ -30,11 +31,13 @@ function OrgCard({
   onClick,
   isFavorite,
   onToggleFavorite,
+  onSettingsClick,
 }: {
   org: OrgAggregatedRelease
   onClick: () => void
   isFavorite: boolean
   onToggleFavorite: (orgName: string) => void
+  onSettingsClick?: (orgName: string) => void
 }) {
   const isPending = org.pending_scan === true
   const endpointPills = org.endpoint_type_counts ?? []
@@ -67,6 +70,16 @@ function OrgCard({
               <SecurityIcon sx={{ fontSize: 16 }} className="text-green-600" />
               <span className="text-sm font-semibold text-gray-700">{org.avg_scorecard_score.toFixed(1)}</span>
             </div>
+          )}
+          {/* Org settings — only for non-pending orgs with a settings handler */}
+          {!isPending && onSettingsClick && (
+            <button
+              onClick={(e) => { e.stopPropagation(); onSettingsClick(org.org_name) }}
+              title="Org settings"
+              className="p-1 rounded hover:bg-gray-100 transition-colors text-gray-400 hover:text-gray-600"
+            >
+              <SettingsIcon sx={{ fontSize: 18 }} />
+            </button>
           )}
           {/* Favorite toggle — requires login; gated in the parent's handler */}
           <button
@@ -351,6 +364,7 @@ export default function ProjectsPage() {
                   onClick={() => handleOrgClick(org.org_name, org.pending_scan === true)}
                   isFavorite={favorites.includes(org.org_name)}
                   onToggleFavorite={handleToggleFavorite}
+                  onSettingsClick={user?.orgs?.includes(org.org_name) ? (name) => router.push(`/orgs/${name}`) : undefined}
                 />
               ))}
             </div>

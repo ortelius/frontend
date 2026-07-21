@@ -95,10 +95,7 @@ export default function OrgMembers({ orgName, isOwner, currentUsername }: OrgMem
   const rowBg = { backgroundColor: isDark ? '#0d1117' : '#f9fafb' }
 
   const fetchMembers = useCallback(async () => {
-    if (!orgName) {
-      setLoading(false)
-      return
-    }
+    if (!orgName) return
     try {
       setLoading(true)
       setLoadError('')
@@ -389,13 +386,10 @@ export default function OrgMembers({ orgName, isOwner, currentUsername }: OrgMem
                   </label>
                   <input
                     type="text"
-                    id="org-invite-username"
-                    name="org-invite-username"
                     value={inviteUsername}
                     onChange={e => setInviteUsername(e.target.value)}
                     placeholder="jdoe"
                     required
-                    autoComplete="off"
                     className="px-3 py-2 rounded-lg border text-sm w-40"
                     style={inputStyle}
                   />
@@ -406,12 +400,9 @@ export default function OrgMembers({ orgName, isOwner, currentUsername }: OrgMem
                   </label>
                   <input
                     type="email"
-                    id="org-invite-email"
-                    name="org-invite-email"
                     value={inviteEmail}
                     onChange={e => setInviteEmail(e.target.value)}
                     placeholder="jdoe@example.com"
-                    autoComplete="new-password"
                     className="px-3 py-2 rounded-lg border text-sm w-56"
                     style={inputStyle}
                   />
