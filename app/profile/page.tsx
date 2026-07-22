@@ -776,6 +776,14 @@ export default function ProfilePage() {
                         const msg = orgCredMessage[org]
                         const gkeActive = (orgStatus?.gke_endpoints?.length ?? 0) > 0
                         const isScannerOpen = scannerSectionOpen[org] !== undefined ? scannerSectionOpen[org] : !gkeActive
+                        // Repos visible via the globally-connected GitHub App that belong to this org —
+                        // separate from orgStatus.tracked_repos (manually added via PAT/search), but both
+                        // represent "being scanned via PAT/App" from the user's point of view.
+                        const appRepos = githubConnected
+                          ? repos.filter((r: any) => r.full_name?.split('/')[0]?.toLowerCase() === org.toLowerCase())
+                          : []
+                        const trackedKeys = new Set((orgStatus?.tracked_repos ?? []).map((r: any) => `${r.owner}/${r.name}`.toLowerCase()))
+                        const appOnlyRepos = appRepos.filter((r: any) => !trackedKeys.has(r.full_name?.toLowerCase()))
                         return (
                           <div
                             key={idx}
@@ -1057,19 +1065,32 @@ export default function ProfilePage() {
                                     </div>
                                     )}
 
-                                    {/* Tracked repos for this org — scanned under this org's connection */}
+                                    {/* Tracked repos for this org — scanned under this org's connection, plus repos visible via the connected GitHub App */}
                                     <div>
                                       <p className={`text-xs font-semibold uppercase tracking-wider mb-2 ${mutedClass}`}>
-                                        Repos Scanned via PAT/App ({orgStatus?.tracked_repos?.length ?? 0})
+                                        Repos Scanned via PAT/App ({(orgStatus?.tracked_repos?.length ?? 0) + appOnlyRepos.length})
                                       </p>
-                                      {!orgStatus?.tracked_repos?.length ? (
+                                      {!orgStatus?.tracked_repos?.length && appOnlyRepos.length === 0 ? (
                                         <p className={`text-xs ${mutedClass}`}>
                                           No repos being scanned via PAT/App for this org yet.
                                           {orgStatus?.gke_endpoints?.length > 0 && ' GKE-synced deployments above are tracked separately.'}
                                         </p>
                                       ) : (
                                         <div className={`rounded-md border divide-y max-h-56 overflow-y-auto ${isDark ? 'border-[#30363d] divide-[#30363d]' : 'border-gray-200 divide-gray-100'}`}>
-                                          {orgStatus.tracked_repos.map((r: any, i: number) => {
+                                          {appOnlyRepos.map((r: any) => (
+                                            <div key={`app-${r.full_name}`} className={`flex items-center justify-between px-3 py-2 text-xs ${isDark ? 'bg-[#161b22]' : 'bg-white'}`}>
+                                              <div className="flex items-center gap-2 min-w-0">
+                                                <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${isDark ? 'bg-green-900/30 text-green-400' : 'bg-green-100 text-green-700'}`}>
+                                                  via App
+                                                </span>
+                                                <span className={`font-medium truncate ${textClass}`}>{r.full_name}</span>
+                                                {r.private && (
+                                                  <span className="text-[10px] bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 px-1.5 rounded">Private</span>
+                                                )}
+                                              </div>
+                                            </div>
+                                          ))}
+                                          {orgStatus?.tracked_repos?.map((r: any, i: number) => {
                                             const hideKey = `hide:${r.provider}/${r.owner}/${r.name}`
                                             return (
                                               <div key={i} className={`flex items-center justify-between px-3 py-2 text-xs ${isDark ? 'bg-[#161b22]' : 'bg-white'}`}>
