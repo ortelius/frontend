@@ -17,9 +17,11 @@ import OpenInNewIcon from '@mui/icons-material/OpenInNew'
 import KeyboardArrowDownIcon from '@mui/icons-material/KeyboardArrowDown'
 import KeyboardArrowUpIcon from '@mui/icons-material/KeyboardArrowUp'
 import SettingsIcon from '@mui/icons-material/Settings'
+import CloudIcon from '@mui/icons-material/Cloud'
+import SyncIcon from '@mui/icons-material/Sync'
 
 export default function ProfilePage() {
-  const { user } = useAuth()
+  const { user, hasRole } = useAuth()
   const { isDark } = useTheme()
   const router = useRouter()
   
@@ -50,6 +52,25 @@ export default function ProfilePage() {
   const [favoriteOrgs, setFavoriteOrgs] = useState<string[]>([])
   const [loadingTracked, setLoadingTracked] = useState(false)
   const [untrackingKey, setUntrackingKey] = useState<string | null>(null)
+
+  // Per-org scanner config (PAT) — org rows expand to reveal this
+  const [expandedOrgRow, setExpandedOrgRow] = useState<string | null>(null)
+  const [scannerSectionOpen, setScannerSectionOpen] = useState<Record<string, boolean>>({})
+  const [orgCredProvider, setOrgCredProvider] = useState<Record<string, 'github' | 'gitlab'>>({})
+  const [orgCredToken, setOrgCredToken] = useState<Record<string, string>>({})
+  const [orgCredStatus, setOrgCredStatus] = useState<Record<string, 'idle' | 'saving' | 'success' | 'error'>>({})
+  const [orgCredMessage, setOrgCredMessage] = useState<Record<string, string>>({})
+  const [orgStatusMap, setOrgStatusMap] = useState<Record<string, any>>({})
+  const [orgStatusError, setOrgStatusError] = useState<Record<string, string>>({})
+  const [loadingOrgStatus, setLoadingOrgStatus] = useState<Record<string, boolean>>({})
+
+  // Per-org repo search + tracked repos (scanned under that org's PAT/App connection)
+  const [orgRepoQuery, setOrgRepoQuery] = useState<Record<string, string>>({})
+  const [orgRepoSearchResults, setOrgRepoSearchResults] = useState<Record<string, any[]>>({})
+  const [orgRepoSearching, setOrgRepoSearching] = useState<Record<string, boolean>>({})
+  const [orgRepoTracking, setOrgRepoTracking] = useState<string | null>(null)
+  const [orgRepoHiding, setOrgRepoHiding] = useState<string | null>(null)
+  const [orgRepoMsg, setOrgRepoMsg] = useState<Record<string, string>>({})
 
   const fetchTrackedRepos = async () => {
     setLoadingTracked(true)
@@ -137,35 +158,56 @@ export default function ProfilePage() {
       .catch((e) => console.error('Failed to fetch favorites', e))
   }, [user])
 
+  // Prefetch scan status for every org up front so collapsed rows can show
+  // at-a-glance status badges (GKE Active / PAT configured) without expanding.
+  useEffect(() => {
+    if (!user?.orgs?.length) return
+    user.orgs.forEach((orgName: string) => {
+      if (!orgStatusMap[orgName] && !loadingOrgStatus[orgName]) {
+        fetchOrgScanStatus(orgName)
+      }
+    })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.orgs])
+
   const fetchProfile = async () => {
       try {
           const configRes = await fetch('/config')
           const config = await configRes.json()
           const restEndpoint = config.restEndpoint || 'http://localhost:3000/api/v1'
-          
+
           const res = await fetch(`${restEndpoint}/auth/me`, { credentials: 'include' })
           if (res.ok) {
               const data = await res.json()
-              let isConnected = !!data.github_connected
-              
+              // github_connected from /auth/me is the source of truth for whether a
+              // GitHub App/OAuth connection exists. The /github/repos call below is
+              // only used to populate the repo list for display — an empty or failed
+              // repos fetch (e.g. no repos granted to the App yet, transient API error)
+              // does NOT mean the connection itself is gone, so it must not downgrade
+              // the connection status.
+              const isConnected = !!data.github_connected
+              setGithubConnected(isConnected)
+
               if (isConnected) {
                   try {
                       const reposRes = await fetch(`${restEndpoint}/github/repos`, { credentials: 'include' })
                       if (reposRes.ok) {
                           const reposData = await reposRes.json()
-                          if (reposData.error || (Array.isArray(reposData) && reposData.length === 0)) {
-                              isConnected = false
+                          if (!reposData.error) {
+                              setRepos(Array.isArray(reposData) ? reposData : [])
                           } else {
-                              setRepos(reposData)
+                              console.warn('GitHub repos fetch returned an error, connection status unaffected:', reposData.error)
+                              setRepos([])
                           }
                       } else {
-                          isConnected = false
+                          console.warn(`GitHub repos fetch failed (${reposRes.status}), connection status unaffected`)
+                          setRepos([])
                       }
                   } catch (e) {
-                      isConnected = false
+                      console.warn('GitHub repos fetch threw, connection status unaffected', e)
+                      setRepos([])
                   }
               }
-              setGithubConnected(isConnected)
           }
       } catch (e) {
           console.error("Failed to fetch profile", e)
@@ -177,6 +219,155 @@ export default function ProfilePage() {
     const res = await fetch('/config')
     const cfg = await res.json()
     return cfg.restEndpoint || 'http://localhost:3000/api/v1'
+  }
+
+  // Per-org scanner config helpers — mirrors the old org-settings credential flow,
+  // scoped per org row instead of a single page.
+  const fetchOrgScanStatus = async (orgName: string) => {
+    setLoadingOrgStatus(prev => ({ ...prev, [orgName]: true }))
+    setOrgStatusError(prev => ({ ...prev, [orgName]: '' }))
+    try {
+      const endpoint = await getEndpoint()
+      const res = await fetch(`${endpoint}/orgs/${encodeURIComponent(orgName)}/status`, { credentials: 'include' })
+      if (res.ok) {
+        const data = await res.json()
+        setOrgStatusMap(prev => ({ ...prev, [orgName]: data }))
+      } else {
+        const data = await res.json().catch(() => ({}))
+        setOrgStatusError(prev => ({ ...prev, [orgName]: data.error || `Failed to load scan status (${res.status})` }))
+      }
+    } catch (e: any) {
+      console.error(`Failed to fetch scan status for ${orgName}`, e)
+      setOrgStatusError(prev => ({ ...prev, [orgName]: 'Network error — could not load scan status' }))
+    } finally {
+      setLoadingOrgStatus(prev => ({ ...prev, [orgName]: false }))
+    }
+  }
+
+  const handleToggleOrgRow = (orgName: string) => {
+    const opening = expandedOrgRow !== orgName
+    setExpandedOrgRow(opening ? orgName : null)
+    if (opening && !orgStatusMap[orgName]) {
+      fetchOrgScanStatus(orgName)
+    }
+  }
+
+  const handleSaveOrgCredential = async (orgName: string, e: React.FormEvent) => {
+    e.preventDefault()
+    const token = orgCredToken[orgName]?.trim()
+    if (!token) return
+    const provider = orgCredProvider[orgName] || 'github'
+    setOrgCredStatus(prev => ({ ...prev, [orgName]: 'saving' }))
+    setOrgCredMessage(prev => ({ ...prev, [orgName]: '' }))
+    try {
+      const endpoint = await getEndpoint()
+      const res = await fetch(`${endpoint}/orgs/${encodeURIComponent(orgName)}/credentials`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ provider, token }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'Failed to save')
+      setOrgCredStatus(prev => ({ ...prev, [orgName]: 'success' }))
+      setOrgCredMessage(prev => ({ ...prev, [orgName]: `${provider} token saved — status: ${data.token_status}` }))
+      setOrgCredToken(prev => ({ ...prev, [orgName]: '' }))
+      fetchOrgScanStatus(orgName)
+    } catch (err: any) {
+      setOrgCredStatus(prev => ({ ...prev, [orgName]: 'error' }))
+      setOrgCredMessage(prev => ({ ...prev, [orgName]: err.message }))
+    }
+  }
+
+  const handleDeleteOrgCredential = async (orgName: string, provider: string) => {
+    try {
+      const endpoint = await getEndpoint()
+      const res = await fetch(`${endpoint}/orgs/${encodeURIComponent(orgName)}/credentials/${encodeURIComponent(provider)}`, {
+        method: 'DELETE',
+        credentials: 'include',
+      })
+      if (!res.ok) throw new Error('Failed to remove credential')
+      fetchOrgScanStatus(orgName)
+    } catch (err: any) {
+      setOrgCredMessage(prev => ({ ...prev, [orgName]: `Error: ${err.message}` }))
+    }
+  }
+
+  const handleOrgRepoSearch = async (orgName: string) => {
+    const query = orgRepoQuery[orgName]?.trim()
+    if (!query) return
+    const provider = orgCredProvider[orgName] || 'github'
+    setOrgRepoSearching(prev => ({ ...prev, [orgName]: true }))
+    setOrgRepoMsg(prev => ({ ...prev, [orgName]: '' }))
+    setOrgRepoSearchResults(prev => ({ ...prev, [orgName]: [] }))
+    try {
+      const endpoint = await getEndpoint()
+      const res = await fetch(
+        `${endpoint}/github/search?q=${encodeURIComponent(query)}&provider=${provider}`,
+        { credentials: 'include' }
+      )
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'Search failed')
+      setOrgRepoSearchResults(prev => ({ ...prev, [orgName]: data.results || [] }))
+    } catch (err: any) {
+      setOrgRepoMsg(prev => ({ ...prev, [orgName]: err.message }))
+    } finally {
+      setOrgRepoSearching(prev => ({ ...prev, [orgName]: false }))
+    }
+  }
+
+  const handleOrgWatchRepo = async (orgName: string, repo: any) => {
+    const key = `${repo.provider}/${repo.owner}/${repo.name}`
+    setOrgRepoTracking(key)
+    setOrgRepoMsg(prev => ({ ...prev, [orgName]: '' }))
+    try {
+      const endpoint = await getEndpoint()
+      const res = await fetch(`${endpoint}/orgs/${encodeURIComponent(orgName)}/tracked-repos`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({
+          provider: repo.provider,
+          owner: repo.owner,
+          name: repo.name,
+          private: repo.private,
+        }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'Failed to add repo')
+      setOrgRepoMsg(prev => ({ ...prev, [orgName]: `Added ${repo.full_name}` }))
+      setOrgRepoSearchResults(prev => ({
+        ...prev,
+        [orgName]: (prev[orgName] || []).filter(r => `${r.provider}/${r.owner}/${r.name}` !== key),
+      }))
+      fetchOrgScanStatus(orgName)
+    } catch (err: any) {
+      setOrgRepoMsg(prev => ({ ...prev, [orgName]: err.message }))
+    } finally {
+      setOrgRepoTracking(null)
+    }
+  }
+
+  const handleOrgHideRepo = async (orgName: string, repo: any) => {
+    const key = `hide:${repo.provider}/${repo.owner}/${repo.name}`
+    setOrgRepoHiding(key)
+    try {
+      const endpoint = await getEndpoint()
+      const res = await fetch(`${endpoint}/orgs/${encodeURIComponent(orgName)}/hidden-repos`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ provider: repo.provider, owner: repo.owner, name: repo.name }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'Failed to hide')
+      setOrgRepoMsg(prev => ({ ...prev, [orgName]: `${repo.owner}/${repo.name} hidden` }))
+      fetchOrgScanStatus(orgName)
+    } catch (err: any) {
+      setOrgRepoMsg(prev => ({ ...prev, [orgName]: err.message }))
+    } finally {
+      setOrgRepoHiding(null)
+    }
   }
 
   // Parse "owner/repo" or full GitHub/GitLab URL into { owner, name }
@@ -340,6 +531,11 @@ export default function ProfilePage() {
   }
 
   if (!user) return null
+
+  // Mirrors backend route gating: credentials + tracked-repos require owner;
+  // hidden-repos allows owner or admin.
+  const canManageOrgCredentials = hasRole(['owner'])
+  const canHideOrgRepos = hasRole(['owner', 'admin'])
 
   const pageBackground = isDark ? 'bg-[#0d1117]' : 'bg-gray-50'
   const cardStyle = {
@@ -569,28 +765,352 @@ export default function ProfilePage() {
                     </div>
                   )}
 
-                  {/* Org list — read-only, shows role */}
+                  {/* Org list — expandable per row for per-org scanner (PAT) config */}
                   {user.orgs && user.orgs.length > 0 ? (
                     <div className="space-y-2">
-                      {user.orgs.map((org, idx) => (
-                        <div
-                          key={idx}
-                          className={`flex items-center justify-between p-3 rounded-lg border ${
-                            isDark ? 'bg-[#0d1117] border-[#30363d]' : 'bg-gray-50 border-gray-200'
-                          }`}
-                        >
-                          <div className="flex items-center gap-3">
-                            <BusinessIcon className={isDark ? 'text-blue-400' : 'text-blue-600'} sx={{ fontSize: 20 }} />
-                            <span className={`font-medium ${textClass}`}>{org}</span>
+                      {user.orgs.map((org, idx) => {
+                        const isRowOpen = expandedOrgRow === org
+                        const orgStatus = orgStatusMap[org]
+                        const provider = orgCredProvider[org] || 'github'
+                        const status = orgCredStatus[org]
+                        const msg = orgCredMessage[org]
+                        const gkeActive = (orgStatus?.gke_endpoints?.length ?? 0) > 0
+                        const isScannerOpen = scannerSectionOpen[org] !== undefined ? scannerSectionOpen[org] : !gkeActive
+                        return (
+                          <div
+                            key={idx}
+                            className={`rounded-lg border overflow-hidden ${
+                              isDark ? 'bg-[#0d1117] border-[#30363d]' : 'bg-gray-50 border-gray-200'
+                            }`}
+                          >
+                            <button
+                              onClick={() => handleToggleOrgRow(org)}
+                              className={`w-full flex items-center justify-between p-3 text-left transition-colors ${
+                                isDark ? 'hover:bg-[#161b22]' : 'hover:bg-gray-100'
+                              }`}
+                            >
+                              <div className="flex items-center gap-3 min-w-0">
+                                <BusinessIcon className={isDark ? 'text-blue-400' : 'text-blue-600'} sx={{ fontSize: 20 }} />
+                                <span className={`font-medium ${textClass}`}>{org}</span>
+                                {/* At-a-glance status badges — avoids needing to expand every row to check setup */}
+                                {orgStatus?.gke_endpoints?.length > 0 && (
+                                  <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium ${isDark ? 'bg-green-900/30 text-green-400 border border-green-900/50' : 'bg-green-100 text-green-700 border border-green-200'}`}>
+                                    <CloudIcon sx={{ fontSize: 10 }} />
+                                    GKE Active
+                                  </span>
+                                )}
+                                {orgStatus?.github_app_connected ? (
+                                  <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium ${isDark ? 'bg-blue-900/30 text-blue-400 border border-blue-900/50' : 'bg-blue-100 text-blue-700 border border-blue-200'}`}>
+                                    App Connected
+                                  </span>
+                                ) : (orgStatus?.github_pat_present || orgStatus?.gitlab_pat_present) ? (
+                                  <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium ${isDark ? 'bg-yellow-900/30 text-yellow-400 border border-yellow-900/50' : 'bg-yellow-100 text-yellow-700 border border-yellow-200'}`}>
+                                    PAT Configured
+                                  </span>
+                                ) : orgStatus && !orgStatus?.gke_endpoints?.length ? (
+                                  <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium ${isDark ? 'bg-gray-800 text-gray-400 border border-gray-700' : 'bg-gray-100 text-gray-500 border border-gray-200'}`}>
+                                    Not Connected
+                                  </span>
+                                ) : null}
+                              </div>
+                              <div className="flex items-center gap-3">
+                                <div className="flex items-center gap-1.5">
+                                  <VerifiedUserIcon className={isDark ? 'text-green-400' : 'text-green-600'} sx={{ fontSize: 16 }} />
+                                  <span className={`text-xs uppercase font-bold ${isDark ? 'text-green-400' : 'text-green-700'}`}>
+                                    {user.role}
+                                  </span>
+                                </div>
+                                {isRowOpen ? (
+                                  <KeyboardArrowUpIcon sx={{ fontSize: 18 }} className={mutedClass} />
+                                ) : (
+                                  <KeyboardArrowDownIcon sx={{ fontSize: 18 }} className={mutedClass} />
+                                )}
+                              </div>
+                            </button>
+
+                            {isRowOpen && (
+                              <div className={`border-t p-4 space-y-3 ${isDark ? 'border-[#30363d] bg-[#0d1117]/60' : 'border-gray-200 bg-white'}`}>
+
+                                {/* GKE Audit Log status — informs scanner setup whether deployments already sync via GKE, independent of PAT/App connection */}
+                                {!loadingOrgStatus[org] && !orgStatusError[org] && orgStatus?.gke_endpoints?.length > 0 && (
+                                  <div className={`p-3 rounded-lg border border-l-4 text-xs ${isDark ? 'bg-[#161b22] border-[#30363d] border-l-green-600' : 'bg-gray-50 border-gray-200 border-l-green-500'}`}>
+                                    <div className="flex items-center gap-2 mb-1.5">
+                                      <CloudIcon sx={{ fontSize: 16 }} className={isDark ? 'text-blue-400' : 'text-blue-600'} />
+                                      <span className={`font-semibold ${textClass}`}>GKE Audit Log Integration</span>
+                                      <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium ${isDark ? 'bg-green-900/30 text-green-400 border border-green-900/50' : 'bg-green-100 text-green-700 border border-green-200'}`}>
+                                        <SyncIcon sx={{ fontSize: 10 }} />
+                                        Active
+                                      </span>
+                                    </div>
+                                    <p className={`mb-2 ${mutedClass}`}>
+                                      Deployments for this org already sync from the GKE audit log collector — PAT/App scanning below is optional and only needed for repos not covered by that pipeline.
+                                    </p>
+                                    <div className="space-y-1">
+                                      {orgStatus.gke_endpoints.map((ep: any) => (
+                                        <div key={ep.name} className={`flex items-center justify-between px-2 py-1.5 rounded text-[11px] ${isDark ? 'bg-[#0d1117]' : 'bg-white'}`}>
+                                          <div className="flex items-center gap-1.5 min-w-0">
+                                            <CloudIcon sx={{ fontSize: 12 }} className={isDark ? 'text-blue-400' : 'text-blue-500'} />
+                                            <span className={`font-mono truncate ${textClass}`}>{ep.name}</span>
+                                            <span className={`px-1.5 py-0.5 rounded text-[10px] ${isDark ? 'bg-blue-900/30 text-blue-300' : 'bg-blue-100 text-blue-700'}`}>
+                                              {ep.endpoint_type || 'cluster'}
+                                            </span>
+                                          </div>
+                                          {ep.last_sync && (
+                                            <span className={`shrink-0 ml-2 ${mutedClass}`}>
+                                              last sync {new Date(ep.last_sync).toLocaleString()}
+                                            </span>
+                                          )}
+                                        </div>
+                                      ))}
+                                    </div>
+                                  </div>
+                                )}
+
+                                <div className={`p-3 rounded-lg border border-l-4 ${isDark ? 'bg-[#161b22] border-[#30363d] border-l-purple-600' : 'bg-gray-50 border-gray-200 border-l-purple-500'}`}>
+                                <button
+                                  onClick={() => setScannerSectionOpen(prev => ({ ...prev, [org]: !isScannerOpen }))}
+                                  className="w-full flex items-center justify-between text-left"
+                                >
+                                  <span className={`text-xs font-semibold uppercase tracking-wider ${mutedClass}`}>
+                                    Scanner Connection — {org}
+                                    {gkeActive && !isScannerOpen && (
+                                      <span className="ml-1.5 font-normal normal-case">(optional — GKE already covers this org)</span>
+                                    )}
+                                  </span>
+                                  {isScannerOpen ? (
+                                    <KeyboardArrowUpIcon sx={{ fontSize: 16 }} className={mutedClass} />
+                                  ) : (
+                                    <KeyboardArrowDownIcon sx={{ fontSize: 16 }} className={mutedClass} />
+                                  )}
+                                </button>
+
+                                {isScannerOpen && (
+                                <div className="mt-3 space-y-3">
+                                {loadingOrgStatus[org] ? (
+                                  <p className={`text-xs ${mutedClass}`}>Loading connection status…</p>
+                                ) : orgStatusError[org] ? (
+                                  <div className={`p-3 rounded-lg border text-xs ${isDark ? 'bg-red-900/10 border-red-900/40 text-red-300' : 'bg-red-50 border-red-200 text-red-700'}`}>
+                                    {orgStatusError[org]}
+                                    <button
+                                      onClick={() => fetchOrgScanStatus(org)}
+                                      className="ml-2 underline font-medium"
+                                    >
+                                      Retry
+                                    </button>
+                                  </div>
+                                ) : (
+                                  <>
+                                    {orgStatus?.github_app_connected ? (
+                                      <div className={`p-3 rounded-lg border text-xs ${isDark ? 'bg-green-900/10 border-green-900/40 text-green-300' : 'bg-green-50 border-green-200 text-green-800'}`}>
+                                        GitHub App installed — all public and private repos are accessible for this org. No PAT needed.
+                                      </div>
+                                    ) : (
+                                      <div className={`p-3 rounded-lg border text-xs ${isDark ? 'bg-blue-900/10 border-blue-900/40 text-blue-300' : 'bg-blue-50 border-blue-200 text-blue-800'}`}>
+                                        Connect the GitHub App for full private + public repo access on this org. A PAT below is only needed for private repos without the app.
+                                      </div>
+                                    )}
+
+                                    {/* Existing PAT badges */}
+                                    <div className="flex flex-wrap gap-2">
+                                      {orgStatus?.github_pat_present && (
+                                        <div className={`flex items-center gap-2 px-2.5 py-1.5 rounded-md border text-xs ${isDark ? 'bg-[#161b22] border-[#30363d]' : 'bg-white border-gray-200'}`}>
+                                          <GitHubIcon sx={{ fontSize: 14 }} />
+                                          <span className={textClass}>GitHub PAT</span>
+                                          <span className={`px-1.5 py-0.5 rounded text-[10px] ${
+                                            orgStatus.token_status === 'valid'
+                                              ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300'
+                                              : 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300'
+                                          }`}>
+                                            {orgStatus.token_status || 'unverified'}
+                                          </span>
+                                          {canManageOrgCredentials && (
+                                            <button
+                                              onClick={() => handleDeleteOrgCredential(org, 'github')}
+                                              className="text-red-500 hover:text-red-700"
+                                              title="Remove token"
+                                            >
+                                              ✕
+                                            </button>
+                                          )}
+                                        </div>
+                                      )}
+                                      {orgStatus?.gitlab_pat_present && (
+                                        <div className={`flex items-center gap-2 px-2.5 py-1.5 rounded-md border text-xs ${isDark ? 'bg-[#161b22] border-[#30363d]' : 'bg-white border-gray-200'}`}>
+                                          <span className={textClass}>GitLab PAT</span>
+                                          <span className={`px-1.5 py-0.5 rounded text-[10px] ${
+                                            orgStatus.token_status === 'valid'
+                                              ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300'
+                                              : 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300'
+                                          }`}>
+                                            {orgStatus.token_status || 'unverified'}
+                                          </span>
+                                          {canManageOrgCredentials && (
+                                            <button
+                                              onClick={() => handleDeleteOrgCredential(org, 'gitlab')}
+                                              className="text-red-500 hover:text-red-700"
+                                              title="Remove token"
+                                            >
+                                              ✕
+                                            </button>
+                                          )}
+                                        </div>
+                                      )}
+                                    </div>
+
+                                    {/* PAT form — owners only, mirrors backend RequireRole("owner") */}
+                                    {canManageOrgCredentials && (
+                                      <form onSubmit={(e) => handleSaveOrgCredential(org, e)} className="flex gap-2 items-end flex-wrap">
+                                        <div>
+                                          <label className={`block text-xs font-medium mb-1 ${labelClass}`}>Provider</label>
+                                          <select
+                                            value={provider}
+                                            onChange={e => setOrgCredProvider(prev => ({ ...prev, [org]: e.target.value as 'github' | 'gitlab' }))}
+                                            style={inputStyle}
+                                            className="px-2 py-1.5 border rounded-md text-xs focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                          >
+                                            <option value="github">GitHub</option>
+                                            <option value="gitlab">GitLab</option>
+                                          </select>
+                                        </div>
+                                        <div className="flex-1 min-w-[160px]">
+                                          <label className={`block text-xs font-medium mb-1 ${labelClass}`}>Personal Access Token</label>
+                                          <input
+                                            type="password"
+                                            value={orgCredToken[org] || ''}
+                                            onChange={e => setOrgCredToken(prev => ({ ...prev, [org]: e.target.value }))}
+                                            placeholder={provider === 'github' ? 'ghp_...' : 'glpat-...'}
+                                            style={inputStyle}
+                                            className="w-full px-2.5 py-1.5 border rounded-md text-xs focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                            autoComplete="off"
+                                            data-lpignore="true"
+                                            data-1p-ignore="true"
+                                          />
+                                        </div>
+                                        <button
+                                          type="submit"
+                                          disabled={status === 'saving' || !orgCredToken[org]?.trim()}
+                                          className="px-3 py-1.5 rounded-md bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white text-xs font-medium transition-colors"
+                                        >
+                                          {status === 'saving' ? 'Saving…' : 'Save Token'}
+                                        </button>
+                                      </form>
+                                    )}
+
+                                    {msg && (
+                                      <p className={`text-xs ${status === 'success' ? (isDark ? 'text-green-400' : 'text-green-600') : (isDark ? 'text-red-400' : 'text-red-600')}`}>
+                                        {msg}
+                                      </p>
+                                    )}
+
+                                    {/* Repo search — find repos to scan under this org's PAT/App connection. Owners only, mirrors backend RequireRole("owner") on TrackRepo. */}
+                                    {canManageOrgCredentials && (
+                                      <div className={`pt-3 border-t ${isDark ? 'border-[#30363d]' : 'border-gray-200'}`}>
+                                        <p className={`text-xs font-semibold uppercase tracking-wider mb-2 ${mutedClass}`}>
+                                          Add a Repo to Scan
+                                          <span className={`ml-1.5 font-normal normal-case ${isDark ? 'text-[#8b949e]' : 'text-gray-500'}`}>
+                                            (searching {provider === 'github' ? 'GitHub' : 'GitLab'})
+                                          </span>
+                                        </p>
+                                        <div className="flex gap-2 items-end flex-wrap">
+                                          <input
+                                            type="text"
+                                            value={orgRepoQuery[org] || ''}
+                                            onChange={e => setOrgRepoQuery(prev => ({ ...prev, [org]: e.target.value }))}
+                                            onKeyDown={e => e.key === 'Enter' && handleOrgRepoSearch(org)}
+                                            placeholder="e.g. nginx, curl/curl"
+                                            style={inputStyle}
+                                            className="flex-1 min-w-[160px] px-2.5 py-1.5 border rounded-md text-xs focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                          />
+                                          <button
+                                            onClick={() => handleOrgRepoSearch(org)}
+                                            disabled={orgRepoSearching[org] || !orgRepoQuery[org]?.trim()}
+                                            className="px-3 py-1.5 rounded-md bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white text-xs font-medium transition-colors"
+                                          >
+                                            {orgRepoSearching[org] ? '…' : 'Search'}
+                                          </button>
+                                        </div>
+
+                                        {(orgRepoSearchResults[org]?.length ?? 0) > 0 && (
+                                          <div className={`mt-2 rounded-md border divide-y max-h-48 overflow-y-auto ${isDark ? 'border-[#30363d] divide-[#30363d]' : 'border-gray-200 divide-gray-100'}`}>
+                                            {orgRepoSearchResults[org].map((r: any, i: number) => {
+                                              const rKey = `${r.provider}/${r.owner}/${r.name}`
+                                              return (
+                                                <div key={i} className={`flex items-center justify-between px-3 py-2 text-xs ${isDark ? 'bg-[#161b22]' : 'bg-white'}`}>
+                                                  <div className="min-w-0">
+                                                    <span className={`font-semibold ${textClass}`}>{r.owner}/{r.name}</span>
+                                                    {r.description && (
+                                                      <p className={`truncate mt-0.5 ${mutedClass}`}>{r.description}</p>
+                                                  )}
+                                                </div>
+                                                <button
+                                                  onClick={() => handleOrgWatchRepo(org, r)}
+                                                  disabled={orgRepoTracking === rKey}
+                                                  className="ml-3 shrink-0 px-2.5 py-1 rounded bg-green-600 hover:bg-green-700 disabled:opacity-50 text-white text-xs font-medium transition-colors"
+                                                >
+                                                  {orgRepoTracking === rKey ? '…' : 'Add'}
+                                                </button>
+                                              </div>
+                                            )
+                                          })}
+                                        </div>
+                                      )}
+                                    </div>
+                                    )}
+
+                                    {/* Tracked repos for this org — scanned under this org's connection */}
+                                    <div>
+                                      <p className={`text-xs font-semibold uppercase tracking-wider mb-2 ${mutedClass}`}>
+                                        Repos Scanned via PAT/App ({orgStatus?.tracked_repos?.length ?? 0})
+                                      </p>
+                                      {!orgStatus?.tracked_repos?.length ? (
+                                        <p className={`text-xs ${mutedClass}`}>
+                                          No repos being scanned via PAT/App for this org yet.
+                                          {orgStatus?.gke_endpoints?.length > 0 && ' GKE-synced deployments above are tracked separately.'}
+                                        </p>
+                                      ) : (
+                                        <div className={`rounded-md border divide-y max-h-56 overflow-y-auto ${isDark ? 'border-[#30363d] divide-[#30363d]' : 'border-gray-200 divide-gray-100'}`}>
+                                          {orgStatus.tracked_repos.map((r: any, i: number) => {
+                                            const hideKey = `hide:${r.provider}/${r.owner}/${r.name}`
+                                            return (
+                                              <div key={i} className={`flex items-center justify-between px-3 py-2 text-xs ${isDark ? 'bg-[#161b22]' : 'bg-white'}`}>
+                                                <div className="flex items-center gap-2 min-w-0">
+                                                  <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${
+                                                    r.provider === 'github'
+                                                      ? 'bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300'
+                                                      : 'bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-300'
+                                                  }`}>
+                                                    {r.provider}
+                                                  </span>
+                                                  <span className={`font-medium truncate ${textClass}`}>{r.owner}/{r.name}</span>
+                                                </div>
+                                                {canHideOrgRepos && (
+                                                  <button
+                                                    onClick={() => handleOrgHideRepo(org, r)}
+                                                    disabled={orgRepoHiding === hideKey}
+                                                    title="Hide from view (keeps scanning)"
+                                                    className={`ml-3 shrink-0 px-2 py-1 rounded text-xs transition-colors disabled:opacity-50 ${
+                                                      isDark ? 'text-gray-400 hover:bg-gray-800' : 'text-gray-600 hover:bg-gray-100'
+                                                    }`}
+                                                  >
+                                                    {orgRepoHiding === hideKey ? '…' : 'Hide'}
+                                                  </button>
+                                                )}
+                                              </div>
+                                            )
+                                          })}
+                                        </div>
+                                      )}
+                                    </div>
+                                  </>
+                                )}
+                                </div>
+                                )}
+                                </div>
+                              </div>
+                            )}
                           </div>
-                          <div className="flex items-center gap-1.5">
-                            <VerifiedUserIcon className={isDark ? 'text-green-400' : 'text-green-600'} sx={{ fontSize: 16 }} />
-                            <span className={`text-xs uppercase font-bold ${isDark ? 'text-green-400' : 'text-green-700'}`}>
-                              {user.role}
-                            </span>
-                          </div>
-                        </div>
-                      ))}
+                        )
+                      })}
                     </div>
                   ) : (
                     <div className={`p-4 rounded-lg border border-dashed text-center ${isDark ? 'border-[#30363d] bg-[#0d1117]' : 'border-gray-300 bg-gray-50'}`}>

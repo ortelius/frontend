@@ -270,7 +270,7 @@ export default function OrgMembers({ orgName, isOwner, currentUsername }: OrgMem
       ) : (
         <>
           {/* ── Member list ── */}
-          <div className="space-y-1.5 mb-6">
+          <div className="space-y-1.5 mb-6 max-h-96 overflow-y-auto pr-1">
             {members.map(m => {
               const pending = m.status === 'pending' ? pendingByUsername.get(m.username) : undefined
               const isSelf = m.username === currentUsername
@@ -285,11 +285,6 @@ export default function OrgMembers({ orgName, isOwner, currentUsername }: OrgMem
                       <span className="font-medium" style={{ color: textPrimary }}>
                         {m.username}
                       </span>
-                      {isSelf && (
-                        <span className="text-xs px-1.5 py-0.5 rounded bg-gray-200 dark:bg-gray-700" style={{ color: textSecondary }}>
-                          you
-                        </span>
-                      )}
                       {m.status === 'pending' && (
                         <span className="inline-flex items-center gap-1 text-xs px-1.5 py-0.5 rounded bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-300">
                           <HourglassEmptyIcon sx={{ fontSize: 12 }} />
@@ -299,6 +294,11 @@ export default function OrgMembers({ orgName, isOwner, currentUsername }: OrgMem
                       {m.status === 'removed' && (
                         <span className="text-xs px-1.5 py-0.5 rounded bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300">
                           removed
+                        </span>
+                      )}
+                      {m.status === 'active' && (
+                        <span className="text-xs px-1.5 py-0.5 rounded bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300">
+                          active
                         </span>
                       )}
                     </div>
@@ -382,27 +382,35 @@ export default function OrgMembers({ orgName, isOwner, currentUsername }: OrgMem
               <form onSubmit={handleInvite} className="flex flex-wrap items-end gap-3">
                 <div className="flex flex-col gap-1">
                   <label className="text-xs font-medium" style={{ color: textSecondary }}>
-                    Username
+                    Login Handle
                   </label>
                   <input
                     type="text"
+                    name="org-invite-identifier-1a2b3c"
                     value={inviteUsername}
-                    onChange={e => setInviteUsername(e.target.value)}
                     placeholder="jdoe"
+                    onChange={e => setInviteUsername(e.target.value)}
                     required
+                    autoComplete="off"
+                    data-lpignore="true"
+                    data-1p-ignore="true"
                     className="px-3 py-2 rounded-lg border text-sm w-40"
                     style={inputStyle}
                   />
                 </div>
                 <div className="flex flex-col gap-1">
                   <label className="text-xs font-medium" style={{ color: textSecondary }}>
-                    Email <span className="font-normal">(required for new users)</span>
+                    Invitation Address
                   </label>
                   <input
-                    type="email"
+                    type="text"
+                    name="org-invite-contact-4d5e6f"
                     value={inviteEmail}
-                    onChange={e => setInviteEmail(e.target.value)}
                     placeholder="jdoe@example.com"
+                    onChange={e => setInviteEmail(e.target.value)}
+                    autoComplete="off"
+                    data-lpignore="true"
+                    data-1p-ignore="true"
                     className="px-3 py-2 rounded-lg border text-sm w-56"
                     style={inputStyle}
                   />
