@@ -30,3 +30,49 @@ ingress:
   certificateArn: ""   # arn:aws:acm:<region>:<account>:certificate/<id>
   subnets: ""          # subnet-aaa,subnet-bbb  (public subnets from terraform output)
   scheme: "internet-facing"
+
+# ---------------------------------------------------------------------------
+# Resources
+#
+# Measured steady state: 2m CPU / 113Mi. The previous hardcoded request of
+# 64Mi was BELOW actual usage, so the pod ran ~77% over its request -- the
+# scheduler was packing nodes on a figure that did not reflect reality.
+#
+# cpu request == limit AND memory request == limit gives Guaranteed QoS, so
+# the kubelet will not evict this pod under node memory pressure.
+# ---------------------------------------------------------------------------
+resources:
+  requests:
+    cpu: 50m
+    memory: 256Mi
+  limits:
+    cpu: 50m
+    memory: 256Mi
+
+# ---------------------------------------------------------------------------
+# Scheduling
+#
+# Defaults to the previously hardcoded selector. Set workload=system from the
+# umbrella chart to pin the frontend to system-pool alongside ArangoDB and
+# the backend, keeping it off preemptible batch-pool nodes.
+# ---------------------------------------------------------------------------
+nodeSelector:
+  kubernetes.io/os: linux
+  # workload: system
+
+tolerations: []
+
+affinity: {}
+
+# ---------------------------------------------------------------------------
+# Probes -- existing values preserved as defaults, now overridable.
+# ---------------------------------------------------------------------------
+probes:
+  readiness:
+    initialDelaySeconds: 5
+    periodSeconds: 10
+    failureThreshold: 3
+  liveness:
+    initialDelaySeconds: 15
+    periodSeconds: 20
+    failureThreshold: 3

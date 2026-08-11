@@ -16,7 +16,15 @@ spec:
         {{- include "microservice.labels" . | nindent 8 }}
     spec:
       nodeSelector:
-        kubernetes.io/os: linux
+        {{- toYaml (.Values.nodeSelector | default (dict "kubernetes.io/os" "linux")) | nindent 8 }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
       containers:
         - name: {{ include "microservice.name" . }}
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
@@ -35,20 +43,17 @@ spec:
             httpGet:
               path: /
               port: 8080
-            initialDelaySeconds: 5
-            periodSeconds: 10
-            failureThreshold: 3
+            initialDelaySeconds: {{ .Values.probes.readiness.initialDelaySeconds | default 5 }}
+            periodSeconds: {{ .Values.probes.readiness.periodSeconds | default 10 }}
+            failureThreshold: {{ .Values.probes.readiness.failureThreshold | default 3 }}
           livenessProbe:
             httpGet:
               path: /
               port: 8080
-            initialDelaySeconds: 15
-            periodSeconds: 20
-            failureThreshold: 3
+            initialDelaySeconds: {{ .Values.probes.liveness.initialDelaySeconds | default 15 }}
+            periodSeconds: {{ .Values.probes.liveness.periodSeconds | default 20 }}
+            failureThreshold: {{ .Values.probes.liveness.failureThreshold | default 3 }}
+          {{- with .Values.resources }}
           resources:
-            requests:
-              cpu: 50m
-              memory: 64Mi
-            limits:
-              cpu: 500m
-              memory: 256Mi
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
