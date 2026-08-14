@@ -1,0 +1,46 @@
+{
+    // Use IntelliSense to learn about possible attributes.
+    // Hover to view descriptions of existing attributes.
+    // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
+    "version": "0.2.0",
+    "configurations": [
+        {
+            // Node-side only: catches breakpoints hit during the initial
+            // server-render pass (SSR). 'use client' components like
+            // AuthContext.tsx DO run here once, for the first HTML sent to
+            // the browser — before hydration ever happens.
+            "name": "Next.js: debug server-side",
+            "type": "node-terminal",
+            "request": "launch",
+            "command": "npm run dev",
+            "cwd": "${workspaceFolder}"
+        },
+        {
+            // Browser-side only: catches breakpoints hit after hydration,
+            // on user interaction, and on client-side navigation — this is
+            // where the `refresh().then(fetchedUser => ...)` and
+            // `router.push('/welcome')` logic actually lives day-to-day.
+            "name": "Next.js: debug client-side",
+            "type": "chrome",
+            "request": "launch",
+            "url": "http://localhost:4000"
+        },
+        {
+            // Both at once: starts the dev server, waits for it to be
+            // ready, then auto-launches Chrome attached to it. Breakpoints
+            // in .tsx files work correctly whichever runtime hits them
+            // first (SSR vs. hydration) without you needing to guess which
+            // config to pick — use this one by default.
+            "name": "Next.js: debug full stack",
+            "type": "node-terminal",
+            "request": "launch",
+            "command": "npm run dev",
+            "cwd": "${workspaceFolder}",
+            "serverReadyAction": {
+                "pattern": "- Local:.+(https?://.+)",
+                "uriFormat": "%s",
+                "action": "debugWithChrome"
+            }
+        }
+    ]
+}
