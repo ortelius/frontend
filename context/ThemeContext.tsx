@@ -24,6 +24,7 @@ function getInitialTheme(): boolean {
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
   // Initialize with localStorage value to match the blocking script
   const [isDark, setIsDark] = useState(getInitialTheme)
+  const [mounted, setMounted] = useState(false)
 
   // Sync with localStorage changes and ensure DOM is updated
   useEffect(() => {
@@ -41,6 +42,16 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     } else {
       document.documentElement.classList.remove('dark')
     }
+
+    // Only now is it safe to render isDark-conditional JSX: any component
+    // reading `isDark` from context (vs. Tailwind's dark: variant, which is
+    // CSS-driven and safe from the very first paint) computes its styling
+    // in JS at render time. During SSR that JS always sees isDark=false
+    // (no localStorage on the server), so that content is baked into the
+    // HTML wrong and flashes light until this effect runs and re-renders.
+    // Holding off on `children` until here — and showing a dark:-class-based
+    // shell in the meantime, which IS safe pre-hydration — closes that gap.
+    setMounted(true)
   }, [])
 
   const toggleTheme = () => {
@@ -58,7 +69,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
 
   return (
     <ThemeContext.Provider value={{ isDark, toggleTheme }}>
-      {children}
+      {mounted ? children : <div className="min-h-screen bg-white dark:bg-[#0d1117]" />}
     </ThemeContext.Provider>
   )
 }
