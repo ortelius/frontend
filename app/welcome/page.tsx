@@ -434,7 +434,18 @@ export default function WelcomePage() {
         {/* Step 5 — continue to org selection */}
         <div className="flex justify-center pt-2">
           <button
-            onClick={() => router.push('/')}
+            onClick={async () => {
+              try {
+                const endpoint = await getEndpoint()
+                await fetch(`${endpoint}/auth/onboarding-complete`, {
+                  method: 'POST',
+                  credentials: 'include',
+                })
+              } catch (e) {
+                console.error('Failed to mark onboarding complete', e)
+              }
+              router.push('/')
+            }}
             className="flex items-center gap-2 px-6 py-3 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold transition-colors"
           >
             Go to Organizations

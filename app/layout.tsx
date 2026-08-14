@@ -27,7 +27,7 @@ export const viewport = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en">
+    <html lang="en" suppressHydrationWarning>
       <head>
         <link rel="preconnect" href="https://app.ortelius.io" />
         <link rel="dns-prefetch" href="https://app.ortelius.io" />
@@ -38,11 +38,19 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
               (function() {
                 try {
                   const theme = localStorage.getItem('ortelius_theme');
-                  if (theme === 'dark') {
+                  const isDark = theme === 'dark';
+                  if (isDark) {
                     document.documentElement.classList.add('dark');
                   } else {
                     document.documentElement.classList.remove('dark');
                   }
+                  // Set the background color directly via inline style so the
+                  // correct pixel is painted immediately, even if the
+                  // stylesheet defining .dark's CSS variables hasn't finished
+                  // loading yet — a class alone does nothing until its CSS
+                  // rule is parsed, which is what causes a white flash in
+                  // that gap.
+                  document.documentElement.style.backgroundColor = isDark ? '#0d1117' : '#ffffff';
                 } catch (e) {}
               })();
             `,
