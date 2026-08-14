@@ -22,6 +22,30 @@ body {
   color-scheme: dark;
 }
 
+/* Browsers (and password managers) force their own background on
+   autofilled inputs — a plain background-color, even set inline, can't
+   override it. The inset box-shadow trick is the standard workaround:
+   browsers treat it as a background layer they'll actually respect. */
+input:-webkit-autofill,
+input:-webkit-autofill:hover,
+input:-webkit-autofill:focus,
+input:-webkit-autofill:active {
+  -webkit-box-shadow: 0 0 0px 1000px #ffffff inset;
+  -webkit-text-fill-color: #111827;
+  caret-color: #111827;
+  transition: background-color 9999s ease-in-out 0s;
+}
+
+.dark input:-webkit-autofill,
+.dark input:-webkit-autofill:hover,
+.dark input:-webkit-autofill:focus,
+.dark input:-webkit-autofill:active {
+  -webkit-box-shadow: 0 0 0px 1000px #0d1117 inset;
+  -webkit-text-fill-color: #e6edf3;
+  caret-color: #e6edf3;
+  transition: background-color 9999s ease-in-out 0s;
+}
+
 /* Light theme - ensure white text on blue backgrounds */
 .bg-blue-600,
 .bg-blue-500,
