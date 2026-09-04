@@ -72,6 +72,14 @@ button.bg-blue-700 {
   color: white;
 }
 
+/* Button text on dark/black backgrounds (e.g. "Connect GitHub Account") */
+.bg-gray-900 button,
+.bg-gray-800 button,
+button.bg-gray-900,
+button.bg-gray-800 {
+  color: white;
+}
+
 /* Hover states for blue buttons */
 .bg-blue-600:hover,
 button.bg-blue-600:hover {
