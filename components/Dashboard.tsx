@@ -290,13 +290,21 @@ export default function Dashboard() {
 
   // 1. Fetch Metrics (MTTR) - Depends on selectedOrg
   useEffect(() => {
+    // Guard: selectedOrg can transiently become null while this component
+    // is still mounted (e.g. "Switch Org" clears context state before the
+    // route change unmounts us). Without this guard, `selectedOrg || ""`
+    // below turned that into a real org:"" request — the most expensive
+    // query shape on the backend, since it scans across all orgs instead
+    // of one. Skip the fetch entirely until there's a real org.
+    if (!selectedOrg) return
+
     const fetchMetrics = async () => {
       try {
         setLoadingMttr(true)
         setMttrData(null)  // Clear immediately so cards don't show stale org data
         const response = await graphqlQuery<GetMTTRAnalysisResponse>(
           GET_MTTR_ANALYSIS, 
-          { days: 180, org: selectedOrg || "" }
+          { days: 180, org: selectedOrg }
         )
         setMttrData(response.dashboardMTTR)
       } catch (err) {
@@ -311,13 +319,16 @@ export default function Dashboard() {
 
   // 2. Fetch Global Status - Depends on selectedOrg
   useEffect(() => {
+    // See guard comment on the MTTR effect above — same reasoning applies here.
+    if (!selectedOrg) return
+
     const fetchGlobalStatus = async () => {
       try {
         setLoadingGlobalStatus(true)
         setGlobalStatus(null)  // Clear immediately so status cards don't show stale org data
         const response = await graphqlQuery<GetDashboardGlobalStatusResponse>(
           GET_DASHBOARD_GLOBAL_STATUS,
-          { org: selectedOrg || "" }
+          { org: selectedOrg }
         )
         setGlobalStatus(response.dashboardGlobalStatus)
       } catch (err) {
@@ -331,13 +342,16 @@ export default function Dashboard() {
 
   // 3. Fetch Trend - Depends on selectedOrg
   useEffect(() => {
+    // See guard comment on the MTTR effect above — same reasoning applies here.
+    if (!selectedOrg) return
+
     const fetchTrend = async () => {
       try {
         setLoadingTrend(true)
         setTrendData([])  // Clear immediately so chart doesn't show stale org data
         const response = await graphqlQuery<GetVulnerabilityTrendResponse>(
           GET_DASHBOARD_VULNERABILITY_TREND,
-          { days: 180, org: selectedOrg || "" }
+          { days: 180, org: selectedOrg }
         )
         
         const rawData = response.dashboardVulnerabilityTrend

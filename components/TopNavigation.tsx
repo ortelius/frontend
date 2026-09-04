@@ -24,7 +24,7 @@ export default function TopNavigation() {
   const pathname = usePathname()
   const { isDark, toggleTheme } = useTheme()
   const { toggleSidebar } = useSidebar()
-  const { selectedOrg, setSelectedOrg } = useOrg()
+  const { selectedOrg } = useOrg()
   const { user, isLoading } = useAuth() // Added auth hook
 
   // Invitation/account-activation flow — suppress breadcrumbs and the
@@ -139,7 +139,6 @@ export default function TopNavigation() {
               
               <Link
                 href="/"
-                onClick={() => setSelectedOrg(null)}
                 className={`flex items-center gap-2 px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${
                   isDark 
                     ? 'text-gray-300 bg-[#21262d] hover:bg-[#30363d] hover:text-white' 

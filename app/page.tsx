@@ -208,6 +208,17 @@ export default function ProjectsPage() {
 
   const isLoggedIn = !!user
 
+  // Clear the org selection on arrival here, not on the way out via
+  // TopNavigation's "Switch Org" link. Clearing it there fired while
+  // Dashboard was still mounted, re-triggering its selectedOrg-dependent
+  // fetch effects with a null/empty org -- the most expensive query shape
+  // on the backend (scans across all orgs instead of one). This page's own
+  // fetch below depends on [user], not selectedOrg, so resetting it here is
+  // safe and has no equivalent side effect.
+  useEffect(() => {
+    setSelectedOrg(null)
+  }, [])
+
   // Load the user's favorites from the backend once logged in.
   // Logged-out users have no favorites to load — leave the list empty
   // rather than calling an endpoint that requires auth.
