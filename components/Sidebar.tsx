@@ -16,10 +16,9 @@ import ExpandLessIcon from '@mui/icons-material/ExpandLess'
 import ManageAccountsIcon from '@mui/icons-material/ManageAccounts'
 import DownloadIcon from '@mui/icons-material/Download'
 
-const FILTER_STORAGE_VERSION = 1
+import { getSidebarFilterStorageKey } from '@/lib/Orgvisibilityfilter'
 
-const getFilterStorageKey = (selectedCategory?: string) =>
-  `ortelius:sidebar-filters:${selectedCategory ?? 'default'}:v${FILTER_STORAGE_VERSION}`
+const getFilterStorageKey = getSidebarFilterStorageKey
 
 interface SidebarProps {
   filters?: {

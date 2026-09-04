@@ -39,11 +39,11 @@ export default function TopNavigation() {
 
   // Always show all nav items, but disable them when no org is selected
   const contextNavItems = [
-    { label: 'Dashboard', icon: DashboardIcon, path: '/dashboard', tagline: '(The Posture)' },
-    { label: 'Synced Endpoints', icon: HubIcon, path: '/endpoints', tagline: "(Where It's Running)" },
-    { label: 'Project Releases', icon: Inventory2Icon, path: '/releases', tagline: '(Where to Fix It)' },
-    { label: 'Mitigations', icon: BuildIcon, path: '/mitigations', tagline: '(How to Fix It)', hidden: true },
-    { label: 'Vulnerabilities', icon: ThreatIntelligence, path: '/vulnerabilities', tagline: '(The Threat)', hidden: true },
+    { label: 'Dashboard', icon: DashboardIcon, path: '/dashboard' },
+    { label: 'Project Releases', icon: Inventory2Icon, path: '/releases' },
+    { label: 'Synced Endpoints', icon: HubIcon, path: '/endpoints' },
+    { label: 'Mitigations', icon: BuildIcon, path: '/mitigations', hidden: true },
+    { label: 'Vulnerabilities', icon: ThreatIntelligence, path: '/vulnerabilities', hidden: true },
   ]
 
   // Define which labels constitute "List Pages" that should be clickable
@@ -221,14 +221,7 @@ export default function TopNavigation() {
                   title="Select an organization to enable"
                 >
                   <Icon sx={{ fontSize: 20 }} />
-                  <div className="flex flex-col items-start leading-tight">
-                    <span className="font-semibold">{item.label}</span>
-                    {item.tagline && (
-                      <span className="mt-0.5 text-[11px] font-semibold tracking-wide text-gray-500 dark:text-gray-500">
-                        {item.tagline}
-                      </span>
-                    )}
-                  </div>
+                  <span className="font-semibold">{item.label}</span>
                 </div>
               ) : (
                 <Link
@@ -243,14 +236,7 @@ export default function TopNavigation() {
                   `}
                 >
                   <Icon sx={{ fontSize: 20 }} />
-                  <div className="flex flex-col items-start leading-tight">
-                    <span className="font-semibold">{item.label}</span>
-                    {item.tagline && (
-                      <span className="mt-0.5 text-[11px] font-semibold tracking-wide text-gray-500 dark:text-gray-500">
-                        {item.tagline}
-                      </span>
-                    )}
-                  </div>
+                  <span className="font-semibold">{item.label}</span>
                 </Link>
               )
             })}

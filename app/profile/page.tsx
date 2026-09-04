@@ -39,7 +39,7 @@ export default function ProfilePage() {
   const [loadingRepos, setLoadingRepos] = useState(false)
 
   // Inline repo favoriting — backed by the existing tracked-repos API
-  const [expandedOrg, setExpandedOrg] = useState<string | null>(null)
+  const [expandedOrg, setExpandedOrg] = useState<string | null>('open')
   const [repoQuery, setRepoQuery] = useState('')
   const [repoProvider, setRepoProvider] = useState<'github' | 'gitlab'>('github')
   const [searchResults, setSearchResults] = useState<any[]>([])

@@ -12,13 +12,7 @@ import GitHubIcon from '@mui/icons-material/GitHub'
 import LockIcon from '@mui/icons-material/Lock'
 import PublicIcon from '@mui/icons-material/Public'
 import OpenInNewIcon from '@mui/icons-material/OpenInNew'
-
-interface TrackedRepo {
-  key: string
-  provider: string
-  owner: string
-  name: string
-}
+import { setAllOrgVisibilityChecked } from '@/lib/Orgvisibilityfilter'
 
 interface GitHubAppRepo {
   id: number
@@ -34,15 +28,17 @@ export default function WelcomePage() {
   const { user } = useAuth()
   const { isDark } = useTheme()
 
-  const [trackedRepos, setTrackedRepos] = useState<TrackedRepo[]>([])
-  const [loadingRepos, setLoadingRepos] = useState(true)
-
   const [repoQuery, setRepoQuery] = useState('')
   const [repoProvider, setRepoProvider] = useState<'github' | 'gitlab'>('github')
   const [searchResults, setSearchResults] = useState<any[]>([])
   const [searching, setSearching] = useState(false)
   const [trackingKey, setTrackingKey] = useState<string | null>(null)
   const [searchMsg, setSearchMsg] = useState<{ msg: string; ok: boolean } | null>(null)
+
+  // Step-1 completion — derived fresh from the backend on every load, never
+  // cached in a cookie or localStorage, so it always reflects real data.
+  const [hasFavorites, setHasFavorites] = useState(false)
+  const [checkingFavorites, setCheckingFavorites] = useState(true)
 
   // GitHub App connect + onboard state
   const [githubConnected, setGithubConnected] = useState(false)
@@ -61,22 +57,6 @@ export default function WelcomePage() {
     const res = await fetch('/config')
     const cfg = await res.json()
     return cfg.restEndpoint || 'http://localhost:3000/api/v1'
-  }
-
-  const fetchTrackedRepos = async () => {
-    setLoadingRepos(true)
-    try {
-      const endpoint = await getEndpoint()
-      const res = await fetch(`${endpoint}/tracked-repos`, { credentials: 'include' })
-      if (res.ok) {
-        const data = await res.json()
-        setTrackedRepos(data.repos ?? [])
-      }
-    } catch (e) {
-      console.error('Failed to fetch favorites', e)
-    } finally {
-      setLoadingRepos(false)
-    }
   }
 
   const fetchGithubStatus = async () => {
@@ -99,10 +79,32 @@ export default function WelcomePage() {
     }
   }
 
+  // Checks the backend directly for at least one favorited repo — this is the
+  // source of truth for whether step 1 is complete, not a flag we set once
+  // and remember client-side.
+  const fetchFavoritesStatus = async () => {
+    setCheckingFavorites(true)
+    try {
+      const endpoint = await getEndpoint()
+      const res = await fetch(`${endpoint}/tracked-repos`, { credentials: 'include' })
+      if (res.ok) {
+        const data = await res.json()
+        setHasFavorites((data.repos ?? []).length > 0)
+      } else {
+        setHasFavorites(false)
+      }
+    } catch (e) {
+      console.error('Failed to check favorites status', e)
+      setHasFavorites(false)
+    } finally {
+      setCheckingFavorites(false)
+    }
+  }
+
   useEffect(() => {
     if (user) {
-      fetchTrackedRepos()
       fetchGithubStatus()
+      fetchFavoritesStatus()
     }
   }, [user])
 
@@ -189,7 +191,7 @@ export default function WelcomePage() {
       if (res.ok) {
         setSearchMsg({ msg: `Added ${key} to Favorites`, ok: true })
         setSearchResults(prev => prev.filter(r => `${r.owner}/${r.name}` !== key))
-        fetchTrackedRepos()
+        fetchFavoritesStatus()
       } else {
         setSearchMsg({ msg: data.error || 'Failed to add favorite', ok: false })
       }
@@ -228,38 +230,87 @@ export default function WelcomePage() {
           </p>
         </div>
 
-        {/* Step 1 — default favorites already added */}
+        {/* Step 1 — repo search: the primary way to add public repos */}
         <div className="p-6 rounded-xl border shadow-sm" style={cardStyle}>
-          <div className="flex items-center gap-2 mb-1">
-            <CheckCircleIcon sx={{ fontSize: 20 }} className="text-green-600" />
-            <h2 className={`text-lg font-semibold ${headingClass}`}>You're already set up</h2>
+          <div className="flex items-center justify-between flex-wrap gap-3 mb-1">
+            <h2 className={`text-lg font-semibold ${headingClass}`}>
+              Favorite a public repo by name
+            </h2>
+            {!checkingFavorites && hasFavorites && (
+              <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold border ${
+                isDark ? 'bg-green-900/20 text-green-400 border-green-900/50' : 'bg-green-100 text-green-800 border-green-200'
+              }`}>
+                <CheckCircleIcon sx={{ fontSize: 14 }} /> Done
+              </span>
+            )}
           </div>
           <p className={`text-sm mb-4 ${mutedClass}`}>
-            We've added a few popular public repos to your Favorites so you have real vulnerability data to explore right away.
+            This is the main way to add public repos to your dashboard — search for something you actually run in production, like <strong>nginx</strong>, <strong>curl</strong>, or <strong>redis</strong>, and we'll start scanning it for CVEs right away. No GitHub connection needed, so it also works for public repos you don't have access to.
           </p>
 
-          {loadingRepos ? (
-            <p className={`text-sm ${mutedClass}`}>Loading your favorites…</p>
-          ) : trackedRepos.length === 0 ? (
-            <p className={`text-sm ${mutedClass}`}>No default favorites found yet — search for one below to get started.</p>
-          ) : (
-            <div className="flex flex-wrap gap-2">
-              {trackedRepos.map(repo => (
-                <span
-                  key={repo.key}
-                  className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium border ${
-                    isDark ? 'bg-[#0d1117] border-[#30363d] text-[#e6edf3]' : 'bg-gray-50 border-gray-200 text-gray-800'
+          <div className="flex gap-2 flex-wrap mb-3">
+            <div className={`flex rounded-md border overflow-hidden text-xs font-medium ${isDark ? 'border-[#30363d]' : 'border-gray-200'}`}>
+              {(['github', 'gitlab'] as const).map(p => (
+                <button
+                  key={p}
+                  onClick={() => { setRepoProvider(p); setSearchResults([]) }}
+                  className={`px-3 py-1.5 capitalize transition-colors ${
+                    repoProvider === p
+                      ? isDark ? 'bg-blue-700 text-white' : 'bg-blue-600 text-white'
+                      : isDark ? 'bg-[#161b22] text-[#8b949e] hover:text-white' : 'bg-gray-50 text-gray-500 hover:text-gray-800'
                   }`}
                 >
-                  <GitHubIcon sx={{ fontSize: 14 }} className={mutedClass} />
-                  {repo.owner}/{repo.name}
-                </span>
+                  {p}
+                </button>
+              ))}
+            </div>
+            <input
+              type="text"
+              value={repoQuery}
+              onChange={e => setRepoQuery(e.target.value)}
+              onKeyDown={e => e.key === 'Enter' && searchRepos()}
+              placeholder="Search name or owner/repo — e.g. curl/curl"
+              style={inputStyle}
+              className="flex-1 min-w-[200px] text-sm px-3 py-1.5 rounded-md border outline-none"
+            />
+            <button
+              onClick={searchRepos}
+              disabled={searching || !repoQuery.trim()}
+              className="flex items-center gap-1.5 px-4 py-1.5 rounded-md bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white text-sm font-medium transition-colors"
+            >
+              <SearchIcon sx={{ fontSize: 16 }} />
+              {searching ? '…' : 'Search'}
+            </button>
+          </div>
+
+          {searchResults.length > 0 && (
+            <div className={`rounded-md border divide-y max-h-56 overflow-y-auto mb-3 ${isDark ? 'border-[#30363d] divide-[#30363d]' : 'border-gray-200 divide-gray-100'}`}>
+              {searchResults.map((r, i) => (
+                <div key={i} className={`flex items-center justify-between px-3 py-2 text-sm ${isDark ? 'bg-[#161b22]' : 'bg-white'}`}>
+                  <div className="min-w-0">
+                    <span className={`font-semibold ${textClass}`}>{r.owner}/{r.name}</span>
+                    {r.description && <p className={`text-xs truncate mt-0.5 ${mutedClass}`}>{r.description}</p>}
+                  </div>
+                  <button
+                    onClick={() => handleAddFavorite(r)}
+                    disabled={trackingKey === `${r.owner}/${r.name}`}
+                    className="px-3 py-1 rounded bg-green-600 hover:bg-green-700 disabled:opacity-50 text-white text-xs font-medium transition-colors ml-3 shrink-0"
+                  >
+                    {trackingKey === `${r.owner}/${r.name}` ? '…' : 'Add to Favorites'}
+                  </button>
+                </div>
               ))}
             </div>
           )}
+
+          {searchMsg && (
+            <p className={`text-sm ${searchMsg.ok ? (isDark ? 'text-green-400' : 'text-green-700') : (isDark ? 'text-red-400' : 'text-red-600')}`}>
+              {searchMsg.msg}
+            </p>
+          )}
         </div>
 
-        {/* Step 2 — connect GitHub App to pick from repos you actually work with */}
+        {/* Step 2 — connect GitHub App to pick from repos you actually work with (including private ones) */}
         <div className="p-6 rounded-xl border shadow-sm" style={cardStyle}>
           <div className="flex items-center justify-between flex-wrap gap-3 mb-1">
             <h2 className={`text-lg font-semibold ${headingClass}`}>
@@ -349,82 +400,19 @@ export default function WelcomePage() {
           )}
         </div>
 
-        {/* Step 3 — optional repo search */}
-        <div className="p-6 rounded-xl border shadow-sm" style={cardStyle}>
-          <h2 className={`text-lg font-semibold mb-1 ${headingClass}`}>
-            Or favorite a public repo by name <span className={`text-sm font-normal ${mutedClass}`}>(optional)</span>
-          </h2>
-          <p className={`text-sm mb-4 ${mutedClass}`}>
-            Search for something you actually run in production — e.g. <strong>nginx</strong>, <strong>curl</strong>, <strong>redis</strong> — and we'll start scanning it for CVEs. Useful for public repos you don't have GitHub access to.
-          </p>
-
-          <div className="flex gap-2 flex-wrap mb-3">
-            <div className={`flex rounded-md border overflow-hidden text-xs font-medium ${isDark ? 'border-[#30363d]' : 'border-gray-200'}`}>
-              {(['github', 'gitlab'] as const).map(p => (
-                <button
-                  key={p}
-                  onClick={() => { setRepoProvider(p); setSearchResults([]) }}
-                  className={`px-3 py-1.5 capitalize transition-colors ${
-                    repoProvider === p
-                      ? isDark ? 'bg-blue-700 text-white' : 'bg-blue-600 text-white'
-                      : isDark ? 'bg-[#161b22] text-[#8b949e] hover:text-white' : 'bg-gray-50 text-gray-500 hover:text-gray-800'
-                  }`}
-                >
-                  {p}
-                </button>
-              ))}
-            </div>
-            <input
-              type="text"
-              value={repoQuery}
-              onChange={e => setRepoQuery(e.target.value)}
-              onKeyDown={e => e.key === 'Enter' && searchRepos()}
-              placeholder="Search name or owner/repo — e.g. curl/curl"
-              style={inputStyle}
-              className="flex-1 min-w-[200px] text-sm px-3 py-1.5 rounded-md border outline-none"
-            />
-            <button
-              onClick={searchRepos}
-              disabled={searching || !repoQuery.trim()}
-              className="flex items-center gap-1.5 px-4 py-1.5 rounded-md bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white text-sm font-medium transition-colors"
-            >
-              <SearchIcon sx={{ fontSize: 16 }} />
-              {searching ? '…' : 'Search'}
-            </button>
-          </div>
-
-          {searchResults.length > 0 && (
-            <div className={`rounded-md border divide-y max-h-56 overflow-y-auto mb-3 ${isDark ? 'border-[#30363d] divide-[#30363d]' : 'border-gray-200 divide-gray-100'}`}>
-              {searchResults.map((r, i) => (
-                <div key={i} className={`flex items-center justify-between px-3 py-2 text-sm ${isDark ? 'bg-[#161b22]' : 'bg-white'}`}>
-                  <div className="min-w-0">
-                    <span className={`font-semibold ${textClass}`}>{r.owner}/{r.name}</span>
-                    {r.description && <p className={`text-xs truncate mt-0.5 ${mutedClass}`}>{r.description}</p>}
-                  </div>
-                  <button
-                    onClick={() => handleAddFavorite(r)}
-                    disabled={trackingKey === `${r.owner}/${r.name}`}
-                    className="px-3 py-1 rounded bg-green-600 hover:bg-green-700 disabled:opacity-50 text-white text-xs font-medium transition-colors ml-3 shrink-0"
-                  >
-                    {trackingKey === `${r.owner}/${r.name}` ? '…' : 'Add to Favorites'}
-                  </button>
-                </div>
-              ))}
-            </div>
-          )}
-
-          {searchMsg && (
-            <p className={`text-sm ${searchMsg.ok ? (isDark ? 'text-green-400' : 'text-green-700') : (isDark ? 'text-red-400' : 'text-red-600')}`}>
-              {searchMsg.msg}
-            </p>
-          )}
-        </div>
-
-        {/* Step 4 — deployment-location question, stubbed pending item 10 (Helm/GitOps scanner support) */}
+        {/* Step 3 — deployment-location question, stubbed pending item 10 (Helm/GitOps scanner support).
+            Nothing to action yet, so it's always shown as complete. */}
         <div className="p-6 rounded-xl border shadow-sm opacity-60" style={cardStyle}>
-          <h2 className={`text-lg font-semibold mb-1 ${headingClass}`}>
-            How is this deployed? <span className={`text-sm font-normal ${mutedClass}`}>(coming soon)</span>
-          </h2>
+          <div className="flex items-center justify-between flex-wrap gap-3 mb-1">
+            <h2 className={`text-lg font-semibold ${headingClass}`}>
+              How is this deployed? <span className={`text-sm font-normal ${mutedClass}`}>(coming soon)</span>
+            </h2>
+            <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold border ${
+              isDark ? 'bg-green-900/20 text-green-400 border-green-900/50' : 'bg-green-100 text-green-800 border-green-200'
+            }`}>
+              <CheckCircleIcon sx={{ fontSize: 14 }} /> Done
+            </span>
+          </div>
           <p className={`text-sm ${mutedClass}`}>
             We'll soon ask whether a repo ships its own software, is a GitOps config repo, or deploys via Helm — so we can
             pick up deployments our scanner can't detect automatically yet. No action needed here for now.
@@ -444,6 +432,7 @@ export default function WelcomePage() {
               } catch (e) {
                 console.error('Failed to mark onboarding complete', e)
               }
+              setAllOrgVisibilityChecked()
               router.push('/')
             }}
             className="flex items-center gap-2 px-6 py-3 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold transition-colors"
