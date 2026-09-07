@@ -342,7 +342,9 @@ export default function ProjectsPage() {
             </div>
             <button
               onClick={() => router.push('/welcome')}
-              className="flex items-center gap-1.5 px-4 py-2 rounded-md bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold transition-colors flex-shrink-0"
+              disabled={!isLoggedIn}
+              title={!isLoggedIn ? 'Sign in to add a project' : undefined}
+              className="flex items-center gap-1.5 px-4 py-2 rounded-md bg-blue-600 hover:bg-blue-700 disabled:bg-gray-300 disabled:hover:bg-gray-300 disabled:cursor-not-allowed text-white text-sm font-semibold transition-colors flex-shrink-0"
             >
               <AddIcon sx={{ fontSize: 18 }} />
               Add Project

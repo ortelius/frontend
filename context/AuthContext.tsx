@@ -1,7 +1,6 @@
 'use client'
 
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react'
-import { useRouter } from 'next/navigation'
 
 export interface AuthUser {
   username: string
@@ -45,7 +44,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   // undefined = still checking session, null = confirmed not logged in
   const [user, setUser] = useState<AuthUser | null | undefined>(undefined)
   const [ssoError, setSsoError] = useState<string | null>(null)
-  const router = useRouter()
 
   const refresh = useCallback(async (): Promise<AuthUser | null> => {
     try {
@@ -81,23 +79,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const isOAuthReturn = typeof window !== 'undefined' && new URLSearchParams(window.location.search).has('login')
 
     refresh().then(fetchedUser => {
-      // Onboarding was previously only reachable via the email-invitation
-      // activation flow. OAuth sign-ins (new signups, or accounts reactivated
-      // after being removed/deactivated) landed straight on the dashboard
-      // with no onboarding message. Send them to /welcome instead.
-      if (isOAuthReturn && fetchedUser?.needs_onboarding) {
-        router.push('/welcome')
-      } else if (isOAuthReturn && !fetchedUser) {
+      if (isOAuthReturn && !fetchedUser) {
         // /auth/me can race with cookie propagation immediately after the
         // OAuth redirect and 401 even though the session is actually valid
         // (the cookie is there, the backend just hasn't caught up yet).
         // Give it one more try before the rest of the app treats this as a
         // real logged-out session.
-        setTimeout(() => {
-          refresh().then(retriedUser => {
-            if (retriedUser?.needs_onboarding) router.push('/welcome')
-          })
-        }, 750)
+        setTimeout(() => { refresh() }, 750)
       }
     })
 
@@ -115,7 +103,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         window.history.replaceState({}, '', cleanUrl)
       }
     }
-  }, [refresh, router])
+  }, [refresh])
 
   const login = useCallback(async (username: string, password: string): Promise<boolean> => {
     try {

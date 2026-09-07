@@ -93,8 +93,9 @@ export default function InvitationPage() {
       if (res.ok) {
         setStatus('accepted')
         // Full reload so AuthContext re-initializes from the new auth_token cookie,
-        // then land on the existing onboarding page.
-        setTimeout(() => { window.location.href = '/welcome' }, 1200)
+        // then land on the org list. Adding a project is now a deliberate
+        // action (the "Add Project" button) rather than an automatic redirect.
+        setTimeout(() => { window.location.href = '/' }, 1200)
       } else {
         setErrorMsg(data.error || 'Failed to activate account')
         setStatus('valid')

@@ -242,7 +242,7 @@ export default function WelcomePage() {
         <div className="p-6 rounded-xl border shadow-sm" style={cardStyle}>
           <div className="flex items-center justify-between flex-wrap gap-3 mb-1">
             <h2 className={`text-lg font-semibold ${headingClass}`}>
-              Connect GitHub <span className={`text-sm font-normal ${mutedClass}`}>(recommended)</span>
+              Monitor Private Releases for CVEs <span className={`text-sm font-normal ${mutedClass}`}>(recommended)</span>
             </h2>
             {githubConnected && (
               <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold border ${
@@ -332,7 +332,7 @@ export default function WelcomePage() {
         <div className="p-6 rounded-xl border shadow-sm" style={cardStyle}>
           <div className="flex items-center justify-between flex-wrap gap-3 mb-1">
             <h2 className={`text-lg font-semibold ${headingClass}`}>
-              Monitor Public Repositories for CVEs
+              Monitor Public Releases for CVEs
             </h2>
             {!checkingFavorites && hasFavorites && (
               <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold border ${
@@ -408,26 +408,7 @@ export default function WelcomePage() {
           )}
         </div>
 
-        {/* Step 3 — deployment-location question, stubbed pending item 10 (Helm/GitOps scanner support).
-            Nothing to action yet, so it's always shown as complete. */}
-        <div className="p-6 rounded-xl border shadow-sm opacity-60" style={cardStyle}>
-          <div className="flex items-center justify-between flex-wrap gap-3 mb-1">
-            <h2 className={`text-lg font-semibold ${headingClass}`}>
-              How is this deployed? <span className={`text-sm font-normal ${mutedClass}`}>(coming soon)</span>
-            </h2>
-            <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold border ${
-              isDark ? 'bg-green-900/20 text-green-400 border-green-900/50' : 'bg-green-100 text-green-800 border-green-200'
-            }`}>
-              <CheckCircleIcon sx={{ fontSize: 14 }} /> Done
-            </span>
-          </div>
-          <p className={`text-sm ${mutedClass}`}>
-            We'll soon ask whether a repo ships its own software, is a GitOps config repo, or deploys via Helm — so we can
-            pick up deployments our scanner can't detect automatically yet. No action needed here for now.
-          </p>
-        </div>
-
-        {/* Step 5 — continue to org selection */}
+        {/* Continue to org selection */}
         <div className="flex justify-center pt-2">
           <button
             onClick={async () => {
