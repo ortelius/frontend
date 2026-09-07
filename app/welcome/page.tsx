@@ -224,93 +224,13 @@ export default function WelcomePage() {
 
         {/* Header */}
         <div className="text-center">
-          <h1 className={`text-3xl font-bold ${headingClass}`}>Welcome to Ortelius, {user.username}!</h1>
+          <h1 className={`text-3xl font-bold ${headingClass}`}>Add a Project</h1>
           <p className={`mt-2 text-sm ${mutedClass}`}>
-            Let's get your vulnerability dashboard set up. This only takes a minute.
+            Connect a repo or favorite a public package to start monitoring it for vulnerabilities.
           </p>
         </div>
 
-        {/* Step 1 — repo search: the primary way to add public repos */}
-        <div className="p-6 rounded-xl border shadow-sm" style={cardStyle}>
-          <div className="flex items-center justify-between flex-wrap gap-3 mb-1">
-            <h2 className={`text-lg font-semibold ${headingClass}`}>
-              Monitor Public Repositories for CVEs
-            </h2>
-            {!checkingFavorites && hasFavorites && (
-              <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold border ${
-                isDark ? 'bg-green-900/20 text-green-400 border-green-900/50' : 'bg-green-100 text-green-800 border-green-200'
-              }`}>
-                <CheckCircleIcon sx={{ fontSize: 14 }} /> Done
-              </span>
-            )}
-          </div>
-          <p className={`text-sm mb-4 ${mutedClass}`}>
-            Search for public software you run in production, such as <strong>nginx</strong>, <strong>curl</strong>, or <strong>redis</strong>, and add it to your dashboard. We&rsquo;ll begin monitoring it for newly discovered CVEs right away. No GitHub connection or repository access is required.
-          </p>
-
-          <div className="flex gap-2 flex-wrap mb-3">
-            <div className={`flex rounded-md border overflow-hidden text-xs font-medium ${isDark ? 'border-[#30363d]' : 'border-gray-200'}`}>
-              {(['github', 'gitlab'] as const).map(p => (
-                <button
-                  key={p}
-                  onClick={() => { setRepoProvider(p); setSearchResults([]) }}
-                  className={`px-3 py-1.5 capitalize transition-colors ${
-                    repoProvider === p
-                      ? isDark ? 'bg-blue-700 text-white' : 'bg-blue-600 text-white'
-                      : isDark ? 'bg-[#161b22] text-[#8b949e] hover:text-white' : 'bg-gray-50 text-gray-500 hover:text-gray-800'
-                  }`}
-                >
-                  {p}
-                </button>
-              ))}
-            </div>
-            <input
-              type="text"
-              value={repoQuery}
-              onChange={e => setRepoQuery(e.target.value)}
-              onKeyDown={e => e.key === 'Enter' && searchRepos()}
-              placeholder="Search name or owner/repo — e.g. curl/curl"
-              style={inputStyle}
-              className="flex-1 min-w-[200px] text-sm px-3 py-1.5 rounded-md border outline-none"
-            />
-            <button
-              onClick={searchRepos}
-              disabled={searching || !repoQuery.trim()}
-              className="flex items-center gap-1.5 px-4 py-1.5 rounded-md bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white text-sm font-medium transition-colors"
-            >
-              <SearchIcon sx={{ fontSize: 16 }} />
-              {searching ? '…' : 'Search'}
-            </button>
-          </div>
-
-          {searchResults.length > 0 && (
-            <div className={`rounded-md border divide-y max-h-56 overflow-y-auto mb-3 ${isDark ? 'border-[#30363d] divide-[#30363d]' : 'border-gray-200 divide-gray-100'}`}>
-              {searchResults.map((r, i) => (
-                <div key={i} className={`flex items-center justify-between px-3 py-2 text-sm ${isDark ? 'bg-[#161b22]' : 'bg-white'}`}>
-                  <div className="min-w-0">
-                    <span className={`font-semibold ${textClass}`}>{r.owner}/{r.name}</span>
-                    {r.description && <p className={`text-xs truncate mt-0.5 ${mutedClass}`}>{r.description}</p>}
-                  </div>
-                  <button
-                    onClick={() => handleAddFavorite(r)}
-                    disabled={trackingKey === `${r.owner}/${r.name}`}
-                    className="px-3 py-1 rounded bg-green-600 hover:bg-green-700 disabled:opacity-50 text-white text-xs font-medium transition-colors ml-3 shrink-0"
-                  >
-                    {trackingKey === `${r.owner}/${r.name}` ? '…' : 'Add to Favorites'}
-                  </button>
-                </div>
-              ))}
-            </div>
-          )}
-
-          {searchMsg && (
-            <p className={`text-sm ${searchMsg.ok ? (isDark ? 'text-green-400' : 'text-green-700') : (isDark ? 'text-red-400' : 'text-red-600')}`}>
-              {searchMsg.msg}
-            </p>
-          )}
-        </div>
-
-        {/* Step 2 — connect GitHub App to pick from repos you actually work with (including private ones) */}
+        {/* Step 1 — connect GitHub App to pick from repos you actually work with (including private ones) */}
         <div className="p-6 rounded-xl border shadow-sm" style={cardStyle}>
           <div className="flex items-center justify-between flex-wrap gap-3 mb-1">
             <h2 className={`text-lg font-semibold ${headingClass}`}>
@@ -397,6 +317,86 @@ export default function WelcomePage() {
                 </p>
               )}
             </>
+          )}
+        </div>
+
+        {/* Step 2 — repo search: the primary way to add public repos */}
+        <div className="p-6 rounded-xl border shadow-sm" style={cardStyle}>
+          <div className="flex items-center justify-between flex-wrap gap-3 mb-1">
+            <h2 className={`text-lg font-semibold ${headingClass}`}>
+              Monitor Public Repositories for CVEs
+            </h2>
+            {!checkingFavorites && hasFavorites && (
+              <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold border ${
+                isDark ? 'bg-green-900/20 text-green-400 border-green-900/50' : 'bg-green-100 text-green-800 border-green-200'
+              }`}>
+                <CheckCircleIcon sx={{ fontSize: 14 }} /> Done
+              </span>
+            )}
+          </div>
+          <p className={`text-sm mb-4 ${mutedClass}`}>
+            Search for public software you run in production, such as <strong>nginx</strong>, <strong>curl</strong>, or <strong>redis</strong>, and add it to your dashboard. We&rsquo;ll begin monitoring it for newly discovered CVEs right away. No GitHub connection or repository access is required.
+          </p>
+
+          <div className="flex gap-2 flex-wrap mb-3">
+            <div className={`flex rounded-md border overflow-hidden text-xs font-medium ${isDark ? 'border-[#30363d]' : 'border-gray-200'}`}>
+              {(['github', 'gitlab'] as const).map(p => (
+                <button
+                  key={p}
+                  onClick={() => { setRepoProvider(p); setSearchResults([]) }}
+                  className={`px-3 py-1.5 capitalize transition-colors ${
+                    repoProvider === p
+                      ? isDark ? 'bg-blue-700 text-white' : 'bg-blue-600 text-white'
+                      : isDark ? 'bg-[#161b22] text-[#8b949e] hover:text-white' : 'bg-gray-50 text-gray-500 hover:text-gray-800'
+                  }`}
+                >
+                  {p}
+                </button>
+              ))}
+            </div>
+            <input
+              type="text"
+              value={repoQuery}
+              onChange={e => setRepoQuery(e.target.value)}
+              onKeyDown={e => e.key === 'Enter' && searchRepos()}
+              placeholder="Search name or owner/repo — e.g. curl/curl"
+              style={inputStyle}
+              className="flex-1 min-w-[200px] text-sm px-3 py-1.5 rounded-md border outline-none"
+            />
+            <button
+              onClick={searchRepos}
+              disabled={searching || !repoQuery.trim()}
+              className="flex items-center gap-1.5 px-4 py-1.5 rounded-md bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white text-sm font-medium transition-colors"
+            >
+              <SearchIcon sx={{ fontSize: 16 }} />
+              {searching ? '…' : 'Search'}
+            </button>
+          </div>
+
+          {searchResults.length > 0 && (
+            <div className={`rounded-md border divide-y max-h-56 overflow-y-auto mb-3 ${isDark ? 'border-[#30363d] divide-[#30363d]' : 'border-gray-200 divide-gray-100'}`}>
+              {searchResults.map((r, i) => (
+                <div key={i} className={`flex items-center justify-between px-3 py-2 text-sm ${isDark ? 'bg-[#161b22]' : 'bg-white'}`}>
+                  <div className="min-w-0">
+                    <span className={`font-semibold ${textClass}`}>{r.owner}/{r.name}</span>
+                    {r.description && <p className={`text-xs truncate mt-0.5 ${mutedClass}`}>{r.description}</p>}
+                  </div>
+                  <button
+                    onClick={() => handleAddFavorite(r)}
+                    disabled={trackingKey === `${r.owner}/${r.name}`}
+                    className="px-3 py-1 rounded bg-green-600 hover:bg-green-700 disabled:opacity-50 text-white text-xs font-medium transition-colors ml-3 shrink-0"
+                  >
+                    {trackingKey === `${r.owner}/${r.name}` ? '…' : 'Add to Favorites'}
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {searchMsg && (
+            <p className={`text-sm ${searchMsg.ok ? (isDark ? 'text-green-400' : 'text-green-700') : (isDark ? 'text-red-400' : 'text-red-600')}`}>
+              {searchMsg.msg}
+            </p>
           )}
         </div>
 

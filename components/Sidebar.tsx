@@ -128,7 +128,7 @@ export default function Sidebar({ filters, setFilters, selectedCategory, isLogge
   const showStatusFilters = selectedCategory === 'image'
   const showVulnScoreFilter = selectedCategory !== 'orgs'
   const showOpenSSFScoreFilter = selectedCategory === 'all'
-  const showDetailFilters = isDetailView
+  const showDetailFilters = isDetailView || selectedCategory === 'all'
   const showFilters = filters && setFilters && selectedCategory
   const defaultOrgVisibility = isLoggedIn ? ['myOrgs', 'favorites', 'public'] : ['public']
   const currentOrgVisibility = filters?.orgVisibility ?? defaultOrgVisibility

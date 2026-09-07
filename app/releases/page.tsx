@@ -16,6 +16,8 @@ function ReleasesContent() {
     status: [] as string[],
     environment: [] as string[],
     endpointType: [] as string[],
+    packageFilter: '',
+    searchCVE: '',
   })
 
   return (

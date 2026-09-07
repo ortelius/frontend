@@ -53,6 +53,46 @@ export function getRelativeTime (dateString: string): string {
   }
 }
 
+// Build a per-release lookup of the packages and CVE IDs present in the
+// latest version of each release, so the Project Releases list can be
+// filtered by package name or CVE ID across the whole org without a
+// dedicated backend query.
+export function buildReleaseSearchIndex (
+  affectedReleases: AffectedRelease[]
+): { packagesByRelease: Map<string, Set<string>>, cvesByRelease: Map<string, Set<string>> } {
+  const releaseMap = new Map<string, AffectedRelease[]>()
+
+  affectedReleases.forEach(ar => {
+    const key = String(ar.release_name)
+    if (!releaseMap.has(key)) {
+      releaseMap.set(key, [])
+    }
+    releaseMap.get(key)?.push(ar)
+  })
+
+  const packagesByRelease = new Map<string, Set<string>>()
+  const cvesByRelease = new Map<string, Set<string>>()
+
+  releaseMap.forEach((releases, key) => {
+    const firstRelease = releases.find(r => r.is_latest) ?? releases[0]
+    const latestVersion = firstRelease.release_version
+    const latestRows = releases.filter(r => r.release_version === latestVersion)
+
+    latestRows.forEach(r => {
+      if (r.package) {
+        if (!packagesByRelease.has(key)) packagesByRelease.set(key, new Set())
+        packagesByRelease.get(key)?.add(r.package)
+      }
+      if (r.cve_id) {
+        if (!cvesByRelease.has(key)) cvesByRelease.set(key, new Set())
+        cvesByRelease.get(key)?.add(r.cve_id)
+      }
+    })
+  })
+
+  return { packagesByRelease, cvesByRelease }
+}
+
 // Transform GraphQL AffectedRelease data to ImageData format for UI
 export function transformAffectedReleasesToImageData (
   affectedReleases: AffectedRelease[]

@@ -18,7 +18,7 @@ import {
   SyncedEndpoint,
   Mitigation,
 } from '@/lib/types'
-import { transformAffectedReleasesToImageData, getRelativeTime } from '@/lib/dataTransform'
+import { transformAffectedReleasesToImageData, buildReleaseSearchIndex, getRelativeTime } from '@/lib/dataTransform'
 
 export type SearchCategory = 'image' | 'all' | 'mitigations' | 'plugin';
 
@@ -32,6 +32,8 @@ interface SearchResultsProps {
     status?: string[]
     environment?: string[]
     endpointType?: string[]
+    packageFilter?: string
+    searchCVE?: string
   }
 }
 
@@ -79,6 +81,10 @@ export default function SearchResults({ query, category, filters }: SearchResult
   const { selectedOrg } = useOrg()
   
   const [results, setResults] = useState<ImageData[]>([])
+  const [releaseSearchIndex, setReleaseSearchIndex] = useState<{
+    packagesByRelease: Map<string, Set<string>>
+    cvesByRelease: Map<string, Set<string>>
+  }>({ packagesByRelease: new Map(), cvesByRelease: new Map() })
   const [endpointResults, setEndpointResults] = useState<SyncedEndpoint[]>([])
   const [vulnerabilityResults, setVulnerabilityResults] = useState<Mitigation[]>([])
   const [mockMitigationList, setMockMitigationList] = useState<Mitigation[]>([])
@@ -106,6 +112,7 @@ export default function SearchResults({ query, category, filters }: SearchResult
             )
             const imageData = transformAffectedReleasesToImageData(releasesResponse.affectedReleases)
             setResults(imageData)
+            setReleaseSearchIndex(buildReleaseSearchIndex(releasesResponse.affectedReleases))
             break
 
           case 'image':
@@ -263,6 +270,18 @@ export default function SearchResults({ query, category, filters }: SearchResult
         })
         if (!matchesFilter) return false
       }
+      if (filters.packageFilter) {
+        const packageLower = filters.packageFilter.toLowerCase()
+        const packages = releaseSearchIndex.packagesByRelease.get(result.name)
+        const hasMatch = packages && Array.from(packages).some(pkg => pkg.toLowerCase().includes(packageLower))
+        if (!hasMatch) return false
+      }
+      if (filters.searchCVE) {
+        const cveLower = filters.searchCVE.toLowerCase()
+        const cves = releaseSearchIndex.cvesByRelease.get(result.name)
+        const hasMatch = cves && Array.from(cves).some(cve => cve.toLowerCase().includes(cveLower))
+        if (!hasMatch) return false
+      }
       return true
     })
   }
@@ -351,7 +370,9 @@ export default function SearchResults({ query, category, filters }: SearchResult
     (filters.openssfScore?.length ?? 0) > 0 ||
     (filters.status?.length ?? 0) > 0 ||
     (filters.environment?.length ?? 0) > 0 ||
-    (filters.endpointType?.length ?? 0) > 0
+    (filters.endpointType?.length ?? 0) > 0 ||
+    filters.packageFilter ||
+    filters.searchCVE
   )
 
   const emptyStateCopy = (() => {

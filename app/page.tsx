@@ -20,6 +20,7 @@ import HourglassEmptyIcon from '@mui/icons-material/HourglassEmpty'
 import StarIcon from '@mui/icons-material/Star'
 import StarBorderIcon from '@mui/icons-material/StarBorder'
 import SettingsIcon from '@mui/icons-material/Settings'
+import AddIcon from '@mui/icons-material/Add'
 
 // endpoint_type_counts is supplied by the backend once the scanner fix lands.
 // Each entry is { label: string, count: number } e.g. { label: "kubernetes", count: 12 }.
@@ -334,9 +335,18 @@ export default function ProjectsPage() {
       />
       <MainLayoutWrapper>
         <div className="px-6 py-6 bg-gray-50 min-h-full">
-          <div className="mb-6">
-            <h1 className="text-3xl font-bold text-gray-900">Organizations</h1>
-            <p className="text-gray-600 mt-1">Select an organization to view vulnerability details</p>
+          <div className="mb-6 flex items-start justify-between gap-4">
+            <div>
+              <h1 className="text-3xl font-bold text-gray-900">Organizations</h1>
+              <p className="text-gray-600 mt-1">Select an organization to view vulnerability details</p>
+            </div>
+            <button
+              onClick={() => router.push('/welcome')}
+              className="flex items-center gap-1.5 px-4 py-2 rounded-md bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold transition-colors flex-shrink-0"
+            >
+              <AddIcon sx={{ fontSize: 18 }} />
+              Add Project
+            </button>
           </div>
 
           {loading ? (
