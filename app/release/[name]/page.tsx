@@ -24,7 +24,35 @@ import ConstructionIcon from '@mui/icons-material/Construction'
 import ArrowBackIcon from '@mui/icons-material/ArrowBack'
 import WhatshotIcon from '@mui/icons-material/Whatshot'
 import NotificationsIcon from '@mui/icons-material/Notifications'
+import AccessTimeIcon from '@mui/icons-material/AccessTime'
 import { Bomb, ThreatIntelligence } from '@/components/icons'
+
+// --- Disclosure timing helper ---
+// Flags CVEs whose disclosure (publish) date falls after this release's build date —
+// i.e. the vulnerability wasn't known at the time this version was released.
+// This page has no visibility into deployments/endpoints, so it only ever
+// compares against the release's own build date.
+type DisclosureTiming = 'post-release' | null
+
+function getDisclosureTiming(
+  published: string | undefined,
+  buildDate: string | undefined
+): DisclosureTiming {
+  if (!published || !buildDate) return null
+  const publishedTime = Date.parse(published)
+  const buildTime = Date.parse(buildDate)
+  if (Number.isNaN(publishedTime) || Number.isNaN(buildTime)) return null
+  return publishedTime > buildTime ? 'post-release' : null
+}
+
+function DisclosureBadge({ timing }: { timing: DisclosureTiming }) {
+  if (timing !== 'post-release') return null
+  return (
+    <span className="px-2 py-1 rounded text-xs font-medium bg-amber-100 text-amber-800 flex items-center gap-1 w-fit whitespace-nowrap">
+      <AccessTimeIcon sx={{ width: 12, height: 12, color: 'rgb(133, 77, 14)' }} /> POST-RELEASE
+    </span>
+  )
+}
 
 
 export default function ReleaseVersionDetailPage() {
@@ -209,6 +237,8 @@ export default function ReleaseVersionDetailPage() {
     version: string
     fixed_in: string
     full_purl?: string
+    published?: string
+    disclosureTiming: DisclosureTiming
   }> = []
 
   vulnerabilities
@@ -228,7 +258,9 @@ export default function ReleaseVersionDetailPage() {
         package: packageName,
         version: v.affected_version || 'unknown',
         fixed_in: v.fixed_in?.join(', ') || '—',
-        full_purl: v.full_purl
+        full_purl: v.full_purl,
+        published: v.published,
+        disclosureTiming: getDisclosureTiming(v.published, release.build_date)
       })
     })
 
@@ -258,7 +290,8 @@ export default function ReleaseVersionDetailPage() {
           package: pkg.name,
           version: pkg.version,
           fixed_in: '—',
-          full_purl: pkg.purl
+          full_purl: pkg.purl,
+          disclosureTiming: null
         })
       }
     })
@@ -319,6 +352,15 @@ export default function ReleaseVersionDetailPage() {
               <h1 className="text-2xl font-bold text-gray-900">
                 {release.name} <span className="text-gray-500 font-normal">({release.version})</span>
               </h1>
+              {release.build_date && (
+                <span
+                  className="flex items-center gap-1 text-sm text-gray-500"
+                  title={`Released ${getRelativeTime(release.build_date)}`}
+                >
+                  <AccessTimeIcon sx={{ width: 14, height: 14 }} />
+                  {release.build_date.slice(0, 10)}
+                </span>
+              )}
             </div>
 
             {/* Right: version history popover */}
@@ -494,6 +536,7 @@ export default function ReleaseVersionDetailPage() {
                     <th className="px-4 py-2 text-left border-b text-xs font-bold text-gray-700 uppercase tracking-wider">CVE ID</th>
                     <th className="px-4 py-2 text-left border-b text-xs font-bold text-gray-700 uppercase tracking-wider">Severity</th>
                     <th className="px-4 py-2 text-left border-b text-xs font-bold text-gray-700 uppercase tracking-wider">Score</th>
+                    <th className="px-4 py-2 text-left border-b text-xs font-bold text-gray-700 uppercase tracking-wider">CVE Disclosed</th>
                     <th className="px-4 py-2 text-left border-b text-xs font-bold text-gray-700 uppercase tracking-wider">Package</th>
                     <th className="px-4 py-2 text-left border-b text-xs font-bold text-gray-700 uppercase tracking-wider">Version</th>
                     <th className="px-4 py-2 text-left border-b text-xs font-bold text-gray-700 uppercase tracking-wider">Fixed In</th>
@@ -539,6 +582,14 @@ export default function ReleaseVersionDetailPage() {
                         )}
                       </td>
                       <td className="px-4 py-2 text-sm">{row.score > 0 ? row.score : '—'}</td>
+                      <td className="px-4 py-2 text-sm">
+                        {row.published ? (
+                          <div className="flex flex-col gap-1" title={getRelativeTime(row.published)}>
+                            <span className="text-gray-600 whitespace-nowrap">{row.published.slice(0, 10)}</span>
+                            <DisclosureBadge timing={row.disclosureTiming} />
+                          </div>
+                        ) : '—'}
+                      </td>
                       <td className="px-4 py-2 text-sm text-gray-600 break-all">{row.package}</td>
                       <td className="px-4 py-2 text-sm text-gray-600">{row.version}</td>
                       <td className="px-4 py-2 text-sm text-gray-600">{row.fixed_in}</td>
@@ -553,6 +604,7 @@ export default function ReleaseVersionDetailPage() {
                     <th className="px-4 py-2 text-left border-b">CVE ID</th>
                     <th className="px-4 py-2 text-left border-b">Severity</th>
                     <th className="px-4 py-2 text-left border-b">Score</th>
+                    <th className="px-4 py-2 text-left border-b">CVE Disclosed</th>
                     <th className="px-4 py-2 text-left border-b">Package</th>
                     <th className="px-4 py-2 text-left border-b">Version</th>
                     <th className="px-4 py-2 text-left border-b">Fixed In</th>
@@ -560,7 +612,7 @@ export default function ReleaseVersionDetailPage() {
                 </thead>
                 <tbody>
                   <tr>
-                    <td colSpan={6} className="px-4 py-8 text-center bg-white">
+                    <td colSpan={7} className="px-4 py-8 text-center bg-white">
                       <p className="text-gray-500 font-medium text-lg">No data found matching current filters.</p>
                     </td>
                   </tr>

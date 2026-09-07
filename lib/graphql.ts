@@ -135,6 +135,7 @@ export const GET_RELEASE = `
         affected_version
         fixed_in
         full_purl
+        published
       }
       
       openssf_scorecard_score

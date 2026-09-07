@@ -124,6 +124,7 @@ export interface Vulnerability {
   affected_version?: string
   fixed_in?: string[]
   full_purl?: string
+  published?: string // CVE/GHSA disclosure date (ISO 8601). Used to flag post-release / post-deployment disclosures.
 }
 
 export interface SyncedEndpoint {
