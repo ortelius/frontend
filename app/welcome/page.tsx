@@ -13,6 +13,7 @@ import LockIcon from '@mui/icons-material/Lock'
 import PublicIcon from '@mui/icons-material/Public'
 import OpenInNewIcon from '@mui/icons-material/OpenInNew'
 import { setAllOrgVisibilityChecked } from '@/lib/Orgvisibilityfilter'
+import { addPendingOrgImports } from '@/lib/pendingImports'
 
 interface GitHubAppRepo {
   id: number
@@ -46,6 +47,10 @@ export default function WelcomePage() {
   const [githubRepos, setGithubRepos] = useState<GitHubAppRepo[]>([])
   const [selectedRepos, setSelectedRepos] = useState<Set<string>>(new Set())
   const [importedRepos, setImportedRepos] = useState<Set<string>>(new Set())
+  // Repo owners (= org names) added this session via either path below —
+  // handed off to the org list on finish so it can show a "Waiting on
+  // import..." placeholder until the backend's import cycle catches up.
+  const [addedOrgNames, setAddedOrgNames] = useState<Set<string>>(new Set())
   const [importing, setImporting] = useState(false)
   const [importMsg, setImportMsg] = useState<{ msg: string; ok: boolean } | null>(null)
 
@@ -75,7 +80,12 @@ export default function WelcomePage() {
       if (res.ok) {
         const data = await res.json()
         setGithubConnected(true)
-        setGithubRepos(Array.isArray(data) ? data : [])
+        const repos = Array.isArray(data) ? data : []
+        setGithubRepos(repos)
+        // Default every repo to checked — if the GitHub App install was
+        // already scoped to a specific set of repos, "Import Selected" is
+        // then a single confirming click instead of re-picking them here.
+        setSelectedRepos(new Set(repos.map((r: GitHubAppRepo) => r.full_name)))
       } else {
         setGithubConnected(false)
       }
@@ -145,6 +155,11 @@ export default function WelcomePage() {
       const data = await res.json()
       if (res.ok) {
         setImportedRepos(prev => new Set([...prev, ...selectedRepos]))
+        setAddedOrgNames(prev => {
+          const next = new Set(prev)
+          selectedRepos.forEach(fullName => next.add(fullName.split('/')[0]))
+          return next
+        })
         setImportMsg({ msg: data.message || `Imported ${selectedRepos.size} repo(s)`, ok: true })
         setSelectedRepos(new Set())
       } else {
@@ -199,6 +214,7 @@ export default function WelcomePage() {
       if (res.ok) {
         setSearchMsg({ msg: `Added ${key} to Favorites`, ok: true })
         setSearchResults(prev => prev.filter(r => `${r.owner}/${r.name}` !== key))
+        setAddedOrgNames(prev => new Set(prev).add(result.owner))
         fetchFavoritesStatus()
       } else {
         setSearchMsg({ msg: data.error || 'Failed to add favorite', ok: false })
@@ -226,17 +242,44 @@ export default function WelcomePage() {
     color: isDark ? '#e6edf3' : '#111827',
   }
 
+  const handleFinish = async () => {
+    try {
+      const endpoint = await getEndpoint()
+      await fetch(`${endpoint}/auth/onboarding-complete`, {
+        method: 'POST',
+        credentials: 'include',
+      })
+    } catch (e) {
+      console.error('Failed to mark onboarding complete', e)
+    }
+    if (addedOrgNames.size > 0) {
+      addPendingOrgImports(Array.from(addedOrgNames))
+    }
+    setAllOrgVisibilityChecked()
+    router.push('/')
+  }
+
   return (
     <div className={`flex-1 overflow-y-auto ${pageBg}`}>
-      <div className="max-w-3xl mx-auto px-6 py-12 space-y-8">
+      {/* Sticky action bar — the page can run long (GitHub repo lists,
+          search results), so the way out shouldn't require scrolling past
+          all of it. Mirrors the "Add Project" button placement on the org
+          list page: top-right, always visible. */}
+      <div
+        className={`sticky top-0 z-10 flex justify-end px-6 py-3 border-b backdrop-blur ${
+          isDark ? 'bg-[#0d1117]/95 border-[#21262d]' : 'bg-white/95 border-gray-100'
+        }`}
+      >
+        <button
+          onClick={handleFinish}
+          className="flex items-center gap-1.5 px-4 py-2 rounded-md bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold transition-colors"
+        >
+          Save &amp; Go to Organizations
+          <ArrowForwardIcon sx={{ fontSize: 16 }} />
+        </button>
+      </div>
 
-        {/* Header */}
-        <div className="text-center">
-          <h1 className={`text-3xl font-bold ${headingClass}`}>Add a Project</h1>
-          <p className={`mt-2 text-sm ${mutedClass}`}>
-            Connect a repo or favorite a public package to start monitoring it for vulnerabilities.
-          </p>
-        </div>
+      <div className="max-w-3xl mx-auto px-6 py-12 space-y-8">
 
         {/* Step 1 — connect GitHub App to pick from repos you actually work with (including private ones) */}
         <div className="p-6 rounded-xl border shadow-sm" style={cardStyle}>
@@ -348,7 +391,7 @@ export default function WelcomePage() {
 
           <div className="flex gap-2 flex-wrap mb-3">
             <div className={`flex rounded-md border overflow-hidden text-xs font-medium ${isDark ? 'border-[#30363d]' : 'border-gray-200'}`}>
-              {(['github', 'gitlab'] as const).map(p => (
+              {(['github'] as const).map(p => (
                 <button
                   key={p}
                   onClick={() => { setRepoProvider(p); setSearchResults([]) }}
@@ -411,19 +454,7 @@ export default function WelcomePage() {
         {/* Continue to org selection */}
         <div className="flex justify-center pt-2">
           <button
-            onClick={async () => {
-              try {
-                const endpoint = await getEndpoint()
-                await fetch(`${endpoint}/auth/onboarding-complete`, {
-                  method: 'POST',
-                  credentials: 'include',
-                })
-              } catch (e) {
-                console.error('Failed to mark onboarding complete', e)
-              }
-              setAllOrgVisibilityChecked()
-              router.push('/')
-            }}
+            onClick={handleFinish}
             className="flex items-center gap-2 px-6 py-3 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold transition-colors"
           >
             Go to Organizations

@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useState, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import Sidebar from '@/components/Sidebar'
 import Toast from '@/components/Toast'
@@ -10,6 +10,7 @@ import { useOrg } from '@/context/OrgContext'
 import { useAuth } from '@/context/AuthContext'
 import MainLayoutWrapper from '@/components/MainLayoutWrapper'
 import { fetchFavoriteOrgs, toggleFavoriteOrgOnServer } from '@/lib/favorites'
+import { getPendingOrgImports, clearPendingOrgImport } from '@/lib/pendingImports'
 
 // Icons
 import BusinessIcon from '@mui/icons-material/Business'
@@ -40,7 +41,8 @@ function OrgCard({
   onToggleFavorite: (orgName: string) => void
   onSettingsClick?: (orgName: string) => void
 }) {
-  const isPending = org.pending_scan === true
+  const isImportPending = org.import_pending === true
+  const isPending = org.pending_scan === true || isImportPending
   const endpointPills = org.endpoint_type_counts ?? []
 
   return (
@@ -61,7 +63,7 @@ function OrgCard({
           <div className="min-w-0">
             <h3 className="font-bold text-gray-900 text-lg truncate">{org.org_name || 'Library'}</h3>
             <p className="text-sm text-gray-500">
-              {isPending ? 'Queued for scan' : `${org.total_releases} Releases`}
+              {isImportPending ? 'Waiting on import…' : isPending ? 'Queued for scan' : `${org.total_releases} Releases`}
             </p>
           </div>
         </div>
@@ -82,22 +84,37 @@ function OrgCard({
               <SettingsIcon sx={{ fontSize: 18 }} />
             </button>
           )}
-          {/* Favorite toggle — requires login; gated in the parent's handler */}
-          <button
-            onClick={(e) => { e.stopPropagation(); onToggleFavorite(org.org_name) }}
-            title={isFavorite ? 'Remove from favorites' : 'Add to favorites'}
-            className="p-1 rounded hover:bg-yellow-50 transition-colors"
-          >
-            {isFavorite ? (
-              <StarIcon sx={{ fontSize: 20 }} className="text-yellow-500" />
-            ) : (
-              <StarBorderIcon sx={{ fontSize: 20 }} className="text-gray-300 hover:text-yellow-400" />
-            )}
-          </button>
+          {/* Favorite toggle — requires login; gated in the parent's handler.
+              Hidden for import-pending placeholders since the org doesn't
+              exist as a real backend record yet to favorite. */}
+          {!isImportPending && (
+            <button
+              onClick={(e) => { e.stopPropagation(); onToggleFavorite(org.org_name) }}
+              title={isFavorite ? 'Remove from favorites' : 'Add to favorites'}
+              className="p-1 rounded hover:bg-yellow-50 transition-colors"
+            >
+              {isFavorite ? (
+                <StarIcon sx={{ fontSize: 20 }} className="text-yellow-500" />
+              ) : (
+                <StarBorderIcon sx={{ fontSize: 20 }} className="text-gray-300 hover:text-yellow-400" />
+              )}
+            </button>
+          )}
         </div>
       </div>
 
-      {isPending ? (
+      {isImportPending ? (
+        <div className="space-y-3">
+          <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-blue-50 border border-blue-200 w-fit">
+            <HourglassEmptyIcon sx={{ fontSize: 14 }} className="text-blue-500 animate-pulse" />
+            <span className="text-xs font-medium text-blue-700">Waiting on import…</span>
+          </div>
+          <p className="text-xs text-gray-400">
+            Imports run about every 15 minutes. This card will fill in with real data automatically
+            once this org has been picked up — no need to refresh.
+          </p>
+        </div>
+      ) : isPending ? (
         <div className="space-y-3">
           <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-blue-50 border border-blue-200 w-fit">
             <HourglassEmptyIcon sx={{ fontSize: 14 }} className="text-blue-500 animate-pulse" />
@@ -195,6 +212,9 @@ export default function ProjectsPage() {
   const { setSelectedOrg } = useOrg()
   const { user } = useAuth()
   const [data, setData] = useState<OrgAggregatedRelease[]>([])
+  // Org names added via Add Project that haven't shown up in `data` yet —
+  // rendered as "Waiting on import..." placeholders. See lib/pendingImports.ts.
+  const [pendingOrgNames, setPendingOrgNames] = useState<string[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [favorites, setFavorites] = useState<string[]>([])
@@ -256,24 +276,46 @@ export default function ProjectsPage() {
     }
   }
 
-  useEffect(() => {
-    const fetchProjects = async () => {
-      try {
-        setLoading(true)
-        const response = await graphqlQuery<GetOrgAggregatedReleasesResponse>(
-          GET_ORG_AGGREGATED_RELEASES,
-          { severity: 'NONE' }
-        )
-        setData(response.orgAggregatedReleases)
-      } catch (err) {
-        console.error('Error fetching projects:', err)
-        setError('Failed to load projects')
-      } finally {
-        setLoading(false)
-      }
+  const fetchProjects = useCallback(async (opts?: { silent?: boolean }) => {
+    try {
+      if (!opts?.silent) setLoading(true)
+      const response = await graphqlQuery<GetOrgAggregatedReleasesResponse>(
+        GET_ORG_AGGREGATED_RELEASES,
+        { severity: 'NONE' }
+      )
+      const realData = response.orgAggregatedReleases
+      setData(realData)
+
+      // Reconcile client-tracked pending imports against the real data —
+      // once an org shows up here (even still awaiting its first scan),
+      // the placeholder has done its job and can be cleared.
+      const realNames = new Set(realData.map(o => o.org_name.toLowerCase()))
+      const stillPending = getPendingOrgImports().filter(name => {
+        const resolved = realNames.has(name.toLowerCase())
+        if (resolved) clearPendingOrgImport(name)
+        return !resolved
+      })
+      setPendingOrgNames(stillPending)
+    } catch (err) {
+      console.error('Error fetching projects:', err)
+      setError('Failed to load projects')
+    } finally {
+      if (!opts?.silent) setLoading(false)
     }
+  }, [])
+
+  useEffect(() => {
     fetchProjects()
-  }, [user])
+  }, [user, fetchProjects])
+
+  // While anything is still pending, poll in the background so placeholders
+  // resolve into real data on their own — imports run ~every 15 min, so
+  // there's no need to make the person refresh to see progress.
+  useEffect(() => {
+    if (pendingOrgNames.length === 0) return
+    const interval = setInterval(() => fetchProjects({ silent: true }), 60000)
+    return () => clearInterval(interval)
+  }, [pendingOrgNames.length, fetchProjects])
 
   const handleOrgClick = (orgName: string, isPending: boolean) => {
     if (isPending) return
@@ -285,8 +327,31 @@ export default function ProjectsPage() {
   const showFavorites = filters.orgVisibility.includes('favorites')
   const showPublic = filters.orgVisibility.includes('public')
 
-  const filteredData = data.filter(org => {
-    const isPending = org.pending_scan === true
+  // Synthetic cards for orgs added via Add Project that haven't shown up in
+  // the real data yet (see lib/pendingImports.ts). Filtered against `data`
+  // as a belt-and-suspenders check in case reconciliation hasn't run yet.
+  const realOrgNames = new Set(data.map(o => o.org_name.toLowerCase()))
+  const pendingPlaceholders: OrgAggregatedRelease[] = pendingOrgNames
+    .filter(name => !realOrgNames.has(name.toLowerCase()))
+    .map(name => ({
+      org_name: name,
+      total_releases: 0,
+      total_versions: 0,
+      total_vulnerabilities: 0,
+      critical_count: 0,
+      high_count: 0,
+      medium_count: 0,
+      low_count: 0,
+      max_severity_score: null,
+      total_dependencies: 0,
+      synced_endpoint_count: 0,
+      import_pending: true,
+    }))
+
+  const combinedData = [...pendingPlaceholders, ...data]
+
+  const filteredData = combinedData.filter(org => {
+    const isPending = org.pending_scan === true || org.import_pending === true
     const isMyOrg = (user?.orgs?.includes(org.org_name) || isPending)
     const isFavorited = favorites.includes(org.org_name)
     const isPublicOnly = !isMyOrg
@@ -340,15 +405,19 @@ export default function ProjectsPage() {
               <h1 className="text-3xl font-bold text-gray-900">Organizations</h1>
               <p className="text-gray-600 mt-1">Select an organization to view vulnerability details</p>
             </div>
-            <button
-              onClick={() => router.push('/welcome')}
-              disabled={!isLoggedIn}
-              title={!isLoggedIn ? 'Sign in to add a project' : undefined}
-              className="flex items-center gap-1.5 px-4 py-2 rounded-md bg-blue-600 hover:bg-blue-700 disabled:bg-gray-300 disabled:hover:bg-gray-300 disabled:cursor-not-allowed text-white text-sm font-semibold transition-colors flex-shrink-0"
+            <span
+              className="flex-shrink-0"
+              title={!isLoggedIn ? 'You need to log in first to add a project' : undefined}
             >
-              <AddIcon sx={{ fontSize: 18 }} />
-              Add Project
-            </button>
+              <button
+                onClick={() => router.push('/welcome')}
+                disabled={!isLoggedIn}
+                className="flex items-center gap-1.5 px-4 py-2 rounded-md bg-blue-600 hover:bg-blue-700 disabled:bg-gray-200 dark:disabled:bg-gray-700 disabled:hover:bg-gray-200 dark:disabled:hover:bg-gray-700 disabled:text-gray-400 dark:disabled:text-gray-500 disabled:cursor-not-allowed text-white text-sm font-semibold transition-colors"
+              >
+                <AddIcon sx={{ fontSize: 18 }} />
+                Add Org/Project
+              </button>
+            </span>
           </div>
 
           {loading ? (
@@ -384,7 +453,7 @@ export default function ProjectsPage() {
                 <OrgCard
                   key={idx}
                   org={org}
-                  onClick={() => handleOrgClick(org.org_name, org.pending_scan === true)}
+                  onClick={() => handleOrgClick(org.org_name, org.pending_scan === true || org.import_pending === true)}
                   isFavorite={favorites.includes(org.org_name)}
                   onToggleFavorite={handleToggleFavorite}
                   onSettingsClick={user?.orgs?.includes(org.org_name) ? (name) => router.push(`/orgs/${name}`) : undefined}

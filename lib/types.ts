@@ -312,6 +312,11 @@ export interface OrgAggregatedRelease {
   synced_endpoint_count: number
   vulnerability_count_delta?: number | null
   pending_scan?: boolean
+  /** Client-only flag: this org hasn't shown up in the backend's aggregated
+   *  data at all yet (distinct from `pending_scan`, which means the backend
+   *  already has a record but hasn't scanned it). Set locally right after
+   *  the Add Project flow, never returned by the API. */
+  import_pending?: boolean
   /** Real per-type endpoint breakdown supplied by the backend */
   endpoint_type_counts?: EndpointTypeCount[]
 }
