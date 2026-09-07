@@ -25,7 +25,7 @@ interface GitHubAppRepo {
 
 export default function WelcomePage() {
   const router = useRouter()
-  const { user } = useAuth()
+  const { user, refresh } = useAuth()
   const { isDark } = useTheme()
 
   const [repoQuery, setRepoQuery] = useState('')
@@ -50,8 +50,16 @@ export default function WelcomePage() {
   const [importMsg, setImportMsg] = useState<{ msg: string; ok: boolean } | null>(null)
 
   useEffect(() => {
-    if (user === null) router.push('/')
-  }, [user, router])
+    if (user === null) {
+      // `refresh()` can race with cookie propagation right after an OAuth
+      // redirect and briefly report "logged out" even though the session is
+      // valid (seen as a one-off 401 from /auth/me while /auth/status still
+      // succeeds). Re-verify before bouncing the user away from this page.
+      refresh().then(fresh => {
+        if (!fresh) router.push('/')
+      })
+    }
+  }, [user, router, refresh])
 
   const getEndpoint = async () => {
     const res = await fetch('/config')

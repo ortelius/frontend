@@ -87,6 +87,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       // with no onboarding message. Send them to /welcome instead.
       if (isOAuthReturn && fetchedUser?.needs_onboarding) {
         router.push('/welcome')
+      } else if (isOAuthReturn && !fetchedUser) {
+        // /auth/me can race with cookie propagation immediately after the
+        // OAuth redirect and 401 even though the session is actually valid
+        // (the cookie is there, the backend just hasn't caught up yet).
+        // Give it one more try before the rest of the app treats this as a
+        // real logged-out session.
+        setTimeout(() => {
+          refresh().then(retriedUser => {
+            if (retriedUser?.needs_onboarding) router.push('/welcome')
+          })
+        }, 750)
       }
     })
 
