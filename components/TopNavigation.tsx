@@ -39,16 +39,16 @@ export default function TopNavigation() {
 
   // Always show all nav items, but disable them when no org is selected
   const contextNavItems = [
-    { label: 'Dashboard', icon: DashboardIcon, path: '/dashboard' },
     { label: 'Project Releases', icon: Inventory2Icon, path: '/releases' },
     { label: 'Synced Endpoints', icon: HubIcon, path: '/endpoints' },
+    { label: 'CISO Dashboard', icon: DashboardIcon, path: '/dashboard' },
     { label: 'Mitigations', icon: BuildIcon, path: '/mitigations', hidden: true },
     { label: 'Vulnerabilities', icon: ThreatIntelligence, path: '/vulnerabilities', hidden: true },
   ]
 
   // Define which labels constitute "List Pages" that should be clickable
   const CLICKABLE_LABELS = new Set([
-    'Dashboard',
+    'CISO Dashboard',
     'Synced Endpoints',
     'Project Releases',
     'Mitigations',
@@ -59,7 +59,7 @@ export default function TopNavigation() {
   // Generate breadcrumbs from pathname
   const generateBreadcrumbs = () => {
     const paths = pathname.split('/').filter(Boolean)
-    const breadcrumbs = [{ label: 'Dashboard', path: '/dashboard' }]
+    const breadcrumbs = [{ label: 'CISO Dashboard', path: '/dashboard' }]
 
     if (selectedOrg && pathname !== '/projects') {
       breadcrumbs.push({ label: selectedOrg, path: '/projects' })

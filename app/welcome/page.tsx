@@ -234,7 +234,7 @@ export default function WelcomePage() {
         <div className="p-6 rounded-xl border shadow-sm" style={cardStyle}>
           <div className="flex items-center justify-between flex-wrap gap-3 mb-1">
             <h2 className={`text-lg font-semibold ${headingClass}`}>
-              Favorite a public repo by name
+              Monitor Public Repositories for CVEs
             </h2>
             {!checkingFavorites && hasFavorites && (
               <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold border ${
@@ -245,7 +245,7 @@ export default function WelcomePage() {
             )}
           </div>
           <p className={`text-sm mb-4 ${mutedClass}`}>
-            This is the main way to add public repos to your dashboard — search for something you actually run in production, like <strong>nginx</strong>, <strong>curl</strong>, or <strong>redis</strong>, and we'll start scanning it for CVEs right away. No GitHub connection needed, so it also works for public repos you don't have access to.
+            Search for public software you run in production, such as <strong>nginx</strong>, <strong>curl</strong>, or <strong>redis</strong>, and add it to your dashboard. We&rsquo;ll begin monitoring it for newly discovered CVEs right away. No GitHub connection or repository access is required.
           </p>
 
           <div className="flex gap-2 flex-wrap mb-3">

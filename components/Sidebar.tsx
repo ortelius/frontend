@@ -163,6 +163,44 @@ export default function Sidebar({ filters, setFilters, selectedCategory, isLogge
     })
   }
 
+  // Well-known "select all" checkbox pattern for a filter group: unchecked
+  // means no filter is applied (all results shown); checking individual boxes
+  // narrows the results; the group's "All" checkbox is a shortcut that either
+  // selects every option (so each box shows as explicitly checked) or clears
+  // the group back to the same "show everything" state. It renders as
+  // indeterminate when only some options in the group are checked.
+  const toggleAllInGroup = (category: string, allValues: string[]) => {
+    if (!setFilters) return
+    setFilters((prev: any) => {
+      const currentValues: string[] = prev[category] || []
+      const allSelected = allValues.every(v => currentValues.includes(v))
+      const nextFilters = { ...prev, [category]: allSelected ? [] : allValues }
+      persistFilters(nextFilters)
+      return nextFilters
+    })
+  }
+
+  const SelectAllRow = ({ category, allValues }: { category: string; allValues: string[] }) => {
+    const currentValues: string[] = (filters as any)?.[category] || []
+    const allSelected = currentValues.length > 0 && allValues.every(v => currentValues.includes(v))
+    const someSelected = currentValues.length > 0 && !allSelected
+
+    return (
+      <label className="flex items-center cursor-pointer group pb-1 mb-1 border-b border-gray-100 dark:border-[#21262d]">
+        <input
+          type="checkbox"
+          checked={allSelected}
+          ref={(el) => { if (el) el.indeterminate = someSelected }}
+          onChange={() => toggleAllInGroup(category, allValues)}
+          className={checkboxClasses}
+        />
+        <span className="ml-2 text-xs font-medium text-gray-700 dark:text-[#c9d1d9] group-hover:text-gray-900 dark:group-hover:text-[#e6edf3]">
+          All
+        </span>
+      </label>
+    )
+  }
+
   const handleTextFilterChange = (category: string, value: string) => {
     if (!setFilters) return
     setFilters((prev: any) => {
@@ -322,6 +360,7 @@ export default function Sidebar({ filters, setFilters, selectedCategory, isLogge
                 <div>
                   <label className="text-xs font-semibold text-gray-700 dark:text-[#c9d1d9] mb-2 block">Vulnerability Score</label>
                   <div className="space-y-1.5">
+                    <SelectAllRow category="vulnerabilityScore" allValues={['critical', 'high', 'medium', 'low', 'clean']} />
                     {['critical', 'high', 'medium', 'low', 'clean'].map(severity => (
                       <label key={severity} className="flex items-center cursor-pointer group">
                         <input
@@ -341,6 +380,7 @@ export default function Sidebar({ filters, setFilters, selectedCategory, isLogge
                 <div>
                   <label className="text-xs font-semibold text-gray-700 dark:text-[#c9d1d9] mb-2 block">OpenSSF Score</label>
                   <div className="space-y-1.5">
+                    <SelectAllRow category="openssfScore" allValues={['high', 'medium', 'low']} />
                     <label className="flex items-center cursor-pointer group">
                       <input
                         type="checkbox"

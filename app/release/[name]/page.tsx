@@ -74,7 +74,9 @@ export default function ReleaseVersionDetailPage() {
   const [packages, setPackages] = useState<Array<{ name: string; version: string; purl?: string }>>([])
 
   // --- Filter State ---
-  const [selectedSeverities, setSelectedSeverities] = useState<string[]>(['critical', 'high', 'medium', 'low', 'clean'])
+  // Empty selection = no filter applied (show everything), consistent with the
+  // Project Releases / Synced Endpoints / Vulnerabilities list pages.
+  const [selectedSeverities, setSelectedSeverities] = useState<string[]>([])
   const [packageFilter, setPackageFilter] = useState('')
   const [searchCVE, setSearchCVE] = useState('')
 
@@ -242,7 +244,7 @@ export default function ReleaseVersionDetailPage() {
   }> = []
 
   vulnerabilities
-    .filter(v => selectedSeverities.includes(v.severity_rating?.toLowerCase() || 'unknown'))
+    .filter(v => selectedSeverities.length === 0 || selectedSeverities.includes(v.severity_rating?.toLowerCase() || 'unknown'))
     .filter(v => !searchCVE || v.cve_id.includes(searchCVE))
     .forEach(v => {
       const packageName = v.package
@@ -264,7 +266,7 @@ export default function ReleaseVersionDetailPage() {
       })
     })
 
-  if (selectedSeverities.includes('clean')) {
+  if (selectedSeverities.length === 0 || selectedSeverities.includes('clean')) {
     packages.forEach(pkg => {
       if (packageFilter && !pkg.name.toLowerCase().includes(packageFilter.toLowerCase())) {
         return
@@ -350,7 +352,9 @@ export default function ReleaseVersionDetailPage() {
                 <span className="ml-1">Back</span>
               </button>
               <h1 className="text-2xl font-bold text-gray-900">
-                {release.name} <span className="text-gray-500 font-normal">({release.version})</span>
+                {release.name} <span className="text-gray-500 font-normal">({release.version}{timeline.find(t => t.version === release.version)?.is_latest && (
+                  <span className="ml-1.5 align-middle text-[10px] font-bold text-green-700 bg-green-100 px-1.5 py-0.5 rounded">LATEST</span>
+                )})</span>
               </h1>
               {release.build_date && (
                 <span

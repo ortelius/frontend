@@ -277,7 +277,7 @@ export default function ProjectsPage() {
   const handleOrgClick = (orgName: string, isPending: boolean) => {
     if (isPending) return
     setSelectedOrg(orgName)
-    router.push('/dashboard')
+    router.push('/releases')
   }
 
   const showMyOrgs = filters.orgVisibility.includes('myOrgs')

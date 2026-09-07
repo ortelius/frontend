@@ -68,8 +68,10 @@ export default function EndpointDetailPage() {
 
   const endpointName = decodeURIComponent(params.name as string)
 
+  // Empty selection = no filter applied (show everything), consistent with the
+  // Project Releases / Synced Endpoints / Vulnerabilities list pages.
   const [filters, setFilters] = useState({
-    selectedSeverities: ['critical', 'high', 'medium', 'low', 'clean'],
+    selectedSeverities: [] as string[],
     packageFilter: '',
     searchCVE: ''
   })
@@ -212,7 +214,7 @@ export default function EndpointDetailPage() {
 
   endpoint.releases?.forEach(release => {
     release.vulnerabilities
-      .filter(v => filters.selectedSeverities.includes(v.severity_rating?.toLowerCase() || 'unknown'))
+      .filter(v => filters.selectedSeverities.length === 0 || filters.selectedSeverities.includes(v.severity_rating?.toLowerCase() || 'unknown'))
       .filter(v => !filters.searchCVE || v.cve_id.includes(filters.searchCVE))
       .forEach(v => {
         const packageName = v.package
