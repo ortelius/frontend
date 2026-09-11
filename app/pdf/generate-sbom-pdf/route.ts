@@ -314,7 +314,11 @@ function buildPDF(data: EndpointPDFData): Promise<Buffer> {
     y += 10
 
     // ── Summary bar ────────────────────────────────────────────────────────
-    const total = data.releases.reduce((s, r) => s + r.vulnerabilities.length, 0)
+    // "Clean" rows (packages with no known vulnerability) are carried in the
+    // same `vulnerabilities` array so they can render in the "No Risk
+    // Packages" section — exclude them from the CVE tally.
+    const isActualCVE = (v: VulnRow) => (v.severity_rating ?? '').toUpperCase() !== 'CLEAN'
+    const total = data.releases.reduce((s, r) => s + r.vulnerabilities.filter(isActualCVE).length, 0)
     const counts: Record<string, number> = { CRITICAL: 0, HIGH: 0, MEDIUM: 0, LOW: 0, CLEAN: 0 }
     for (const r of data.releases) {
       for (const v of r.vulnerabilities) {
@@ -399,7 +403,7 @@ function buildPDF(data: EndpointPDFData): Promise<Buffer> {
 
       doc.rect(rxx, y, relCols[2].w, ROW_H).fillAndStroke(bg, '#E5E7EB')
       doc.font('Helvetica').fontSize(8).fillColor('#1F2937')
-         .text(String(rel.vulnerabilities?.length || 0), rxx + 4, y + 6, { width: relCols[2].w - 8, height: ROW_H - 6, ellipsis: true })
+         .text(String(rel.vulnerabilities?.filter(isActualCVE).length || 0), rxx + 4, y + 6, { width: relCols[2].w - 8, height: ROW_H - 6, ellipsis: true })
 
       y += ROW_H
     }

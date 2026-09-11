@@ -25,6 +25,7 @@ import ArrowBackIcon from '@mui/icons-material/ArrowBack'
 import WhatshotIcon from '@mui/icons-material/Whatshot'
 import NotificationsIcon from '@mui/icons-material/Notifications'
 import AccessTimeIcon from '@mui/icons-material/AccessTime'
+import PictureAsPdfIcon from '@mui/icons-material/PictureAsPdf'
 import { Bomb, ThreatIntelligence } from '@/components/icons'
 
 // --- Disclosure timing helper ---
@@ -66,6 +67,7 @@ export default function ReleaseVersionDetailPage() {
   const [isEndpointsModalOpen, setIsEndpointsModalOpen] = useState(false)
   const [timeline, setTimeline] = useState<ReleaseTimelineEntry[]>([])
   const [timelineLoading, setTimelineLoading] = useState(false)
+  const [exportingPdf, setExportingPdf] = useState(false)
   
   const releaseVersion = params.name as string
   const version = searchParams.get('version') || 'latest'
@@ -315,6 +317,84 @@ export default function ReleaseVersionDetailPage() {
     URL.revokeObjectURL(url)
   }
 
+  const handleExportPdf = async () => {
+    if (!release) return
+    setExportingPdf(true)
+    try {
+      // Vulnerable packages, as reported by the scanner.
+      const vulnRows = (vulnerabilities || []).map(v => ({
+        cve_id: v.cve_id,
+        severity_rating: v.severity_rating,
+        severity_score: v.severity_score,
+        package: v.package,
+        affected_version: v.affected_version,
+        fixed_in: v.fixed_in || [],
+        full_purl: v.full_purl,
+      }))
+
+      // Packages from the SBOM that have no associated vulnerability — same
+      // matching logic used to build the "clean" rows in the on-page table —
+      // so the PDF's "No Risk Packages" section isn't left empty.
+      const cleanRows = (packages || [])
+        .filter(pkg => {
+          const isVulnerable = (vulnerabilities || []).some(v => {
+            if (v.full_purl && pkg.purl) {
+              const basePkgPurl = pkg.purl.split('@')[0]
+              const baseVulnPurl = v.full_purl.split('@')[0]
+              if (basePkgPurl === baseVulnPurl) {
+                return v.affected_version === pkg.version
+              }
+            }
+            const vulnPackageName = v.package.split('@')[0]
+            return vulnPackageName === pkg.name && v.affected_version === pkg.version
+          })
+          return !isVulnerable
+        })
+        .map(pkg => ({
+          cve_id: '—',
+          severity_rating: 'clean',
+          severity_score: 0,
+          package: pkg.name,
+          affected_version: pkg.version,
+          fixed_in: [],
+          full_purl: pkg.purl,
+        }))
+
+      const payload = {
+        endpoint_name: release.name,
+        endpoint_type: 'release',
+        environment: release.version,
+        last_sync: release.build_date || new Date().toISOString(),
+        releases: [{
+          release_name: release.name,
+          release_version: release.version,
+          vulnerabilities: [...vulnRows, ...cleanRows],
+        }],
+      }
+
+      const res = await fetch('/pdf/generate-sbom-pdf', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      })
+
+      if (!res.ok) throw new Error(await res.text())
+
+      const blob = await res.blob()
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `${release.name}-${release.version}-sbom-${new Date().toISOString().split('T')[0]}.pdf`
+      a.click()
+      URL.revokeObjectURL(url)
+    } catch (err) {
+      console.error('PDF export failed:', err)
+      alert('PDF export failed. Please try again.')
+    } finally {
+      setExportingPdf(false)
+    }
+  }
+
   const openssfScore = release.openssf_scorecard_score ?? 'N/A'
   const syncedEndpoints = release.synced_endpoint_count || 0
   const syncedEndpointsList = release.synced_endpoints || []
@@ -439,6 +519,17 @@ export default function ReleaseVersionDetailPage() {
                 </div>
               </div>
             )}
+
+            {/* SBOM PDF export button — right-aligned in the header row */}
+            <button
+              onClick={handleExportPdf}
+              disabled={exportingPdf}
+              className="ml-auto flex items-center gap-2 px-4 py-2 rounded-md border border-red-300 bg-red-50 text-red-700 hover:bg-red-100 hover:border-red-400 transition-colors text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed flex-shrink-0"
+              title="Export this release's SBOM as PDF"
+            >
+              <PictureAsPdfIcon sx={{ width: 18, height: 18 }} />
+              {exportingPdf ? 'Generating PDF…' : 'Export SBOM PDF'}
+            </button>
           </div>
 
 
