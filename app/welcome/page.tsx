@@ -12,6 +12,9 @@ import GitHubIcon from '@mui/icons-material/GitHub'
 import LockIcon from '@mui/icons-material/Lock'
 import PublicIcon from '@mui/icons-material/Public'
 import OpenInNewIcon from '@mui/icons-material/OpenInNew'
+import KeyboardArrowDownIcon from '@mui/icons-material/KeyboardArrowDown'
+import KeyboardArrowUpIcon from '@mui/icons-material/KeyboardArrowUp'
+import AddIcon from '@mui/icons-material/Add'
 import { setAllOrgVisibilityChecked } from '@/lib/Orgvisibilityfilter'
 import { addPendingOrgImports } from '@/lib/pendingImports'
 
@@ -23,6 +26,19 @@ interface GitHubAppRepo {
   html_url: string
   private: boolean
 }
+
+// Per-repo mapping collected before import:
+//  - artifactNamespace: GitHub org -> artifact/docker namespace (e.g. DeployHubProj -> deployhub)
+//  - isGitops + endpointName/endpointNamespace: repo -> runtime endpoint mapping
+//    (e.g. us-central-1_deployhub/deployhub) for repos that hold gitops manifests/charts
+interface RepoMapping {
+  artifactNamespace: string
+  isGitops: boolean
+  endpointName: string
+  endpointNamespace: string
+}
+
+const emptyMapping: RepoMapping = { artifactNamespace: '', isGitops: false, endpointName: '', endpointNamespace: '' }
 
 export default function WelcomePage() {
   const router = useRouter()
@@ -47,6 +63,11 @@ export default function WelcomePage() {
   const [githubRepos, setGithubRepos] = useState<GitHubAppRepo[]>([])
   const [selectedRepos, setSelectedRepos] = useState<Set<string>>(new Set())
   const [importedRepos, setImportedRepos] = useState<Set<string>>(new Set())
+  // Which repo rows have their mapping section expanded, and the mapping
+  // values entered for each repo (keyed by full_name), collected client-side
+  // and sent along with the import request.
+  const [expandedRepos, setExpandedRepos] = useState<Set<string>>(new Set())
+  const [repoMappings, setRepoMappings] = useState<Record<string, RepoMapping>>({})
   // Repo owners (= org names) added this session via either path below —
   // handed off to the org list on finish so it can show a "Waiting on
   // import..." placeholder until the backend's import cycle catches up.
@@ -140,17 +161,53 @@ export default function WelcomePage() {
     })
   }
 
+  const toggleRepoExpanded = (fullName: string) => {
+    setExpandedRepos(prev => {
+      const next = new Set(prev)
+      if (next.has(fullName)) next.delete(fullName)
+      else next.add(fullName)
+      return next
+    })
+  }
+
+  const getMapping = (fullName: string): RepoMapping => repoMappings[fullName] || emptyMapping
+
+  const updateMapping = (fullName: string, patch: Partial<RepoMapping>) => {
+    setRepoMappings(prev => ({
+      ...prev,
+      [fullName]: { ...getMapping(fullName), ...patch },
+    }))
+  }
+
   const handleImportSelected = async () => {
     if (selectedRepos.size === 0) return
     setImporting(true)
     setImportMsg(null)
     try {
       const endpoint = await getEndpoint()
+      // Only send a mapping entry for repos where the user actually filled
+      // something in — an untouched repo just imports with no mapping.
+      const mappings: Record<string, { artifactNamespace: string | null; gitopsEndpoint: string | null }> = {}
+      selectedRepos.forEach(fullName => {
+        const m = getMapping(fullName)
+        const artifactNamespace = m.artifactNamespace.trim()
+        const gitopsEndpoint =
+          m.isGitops && m.endpointName.trim() && m.endpointNamespace.trim()
+            ? `${m.endpointName.trim()}/${m.endpointNamespace.trim()}`
+            : ''
+        if (artifactNamespace || gitopsEndpoint) {
+          mappings[fullName] = {
+            artifactNamespace: artifactNamespace || null,
+            gitopsEndpoint: gitopsEndpoint || null,
+          }
+        }
+      })
+
       const res = await fetch(`${endpoint}/github/onboard`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
-        body: JSON.stringify({ repos: Array.from(selectedRepos) }),
+        body: JSON.stringify({ repos: Array.from(selectedRepos), repoMappings: mappings }),
       })
       const data = await res.json()
       if (res.ok) {
@@ -161,6 +218,17 @@ export default function WelcomePage() {
           return next
         })
         setImportMsg({ msg: data.message || `Imported ${selectedRepos.size} repo(s)`, ok: true })
+        // Clean up mapping/expansion state for the repos we just imported.
+        setExpandedRepos(prev => {
+          const next = new Set(prev)
+          selectedRepos.forEach(fullName => next.delete(fullName))
+          return next
+        })
+        setRepoMappings(prev => {
+          const next = { ...prev }
+          selectedRepos.forEach(fullName => delete next[fullName])
+          return next
+        })
         setSelectedRepos(new Set())
       } else {
         setImportMsg({ msg: data.error || 'Failed to import selected repos', ok: false })
@@ -288,11 +356,25 @@ export default function WelcomePage() {
               Monitor Private Releases for CVEs <span className={`text-sm font-normal ${mutedClass}`}>(recommended)</span>
             </h2>
             {githubConnected && (
-              <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold border ${
-                isDark ? 'bg-green-900/20 text-green-400 border-green-900/50' : 'bg-green-100 text-green-800 border-green-200'
-              }`}>
-                <CheckCircleIcon sx={{ fontSize: 14 }} /> Connected
-              </span>
+              <div className="flex items-center gap-2">
+                <a
+                  href="https://github.com/settings/installations"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className={`inline-flex items-center gap-1 text-xs font-semibold hover:underline ${
+                    isDark ? 'text-blue-400' : 'text-blue-600'
+                  }`}
+                >
+                  <AddIcon sx={{ fontSize: 14 }} />
+                  Add more repos
+                  <OpenInNewIcon sx={{ fontSize: 12 }} />
+                </a>
+                <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold border ${
+                  isDark ? 'bg-green-900/20 text-green-400 border-green-900/50' : 'bg-green-100 text-green-800 border-green-200'
+                }`}>
+                  <CheckCircleIcon sx={{ fontSize: 14 }} /> Connected
+                </span>
+              </div>
             )}
           </div>
           <p className={`text-sm mb-4 ${mutedClass}`}>
@@ -326,30 +408,110 @@ export default function WelcomePage() {
               <div className={`rounded-md border divide-y max-h-64 overflow-y-auto mb-3 ${isDark ? 'border-[#30363d] divide-[#30363d]' : 'border-gray-200 divide-gray-100'}`}>
                 {githubRepos.map(repo => {
                   const alreadyImported = importedRepos.has(repo.full_name)
+                  const isExpanded = expandedRepos.has(repo.full_name)
+                  const mapping = getMapping(repo.full_name)
+                  const orgName = repo.full_name.split('/')[0]
                   return (
-                    <label
+                    <div
                       key={repo.id}
-                      className={`flex items-center gap-3 px-3 py-2 text-sm cursor-pointer ${isDark ? 'bg-[#161b22]' : 'bg-white'} ${alreadyImported ? 'opacity-50' : ''}`}
+                      className={`${isDark ? 'bg-[#161b22]' : 'bg-white'} ${alreadyImported ? 'opacity-50' : ''}`}
                     >
-                      <input
-                        type="checkbox"
-                        checked={selectedRepos.has(repo.full_name)}
-                        disabled={alreadyImported}
-                        onChange={() => toggleRepoSelection(repo.full_name)}
-                        className="shrink-0"
-                      />
-                      {repo.private ? (
-                        <LockIcon sx={{ fontSize: 14 }} className={mutedClass} />
-                      ) : (
-                        <PublicIcon sx={{ fontSize: 14 }} className={mutedClass} />
+                      <label className="flex items-center gap-3 px-3 py-2 text-sm cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={selectedRepos.has(repo.full_name)}
+                          disabled={alreadyImported}
+                          onChange={() => toggleRepoSelection(repo.full_name)}
+                          className="shrink-0"
+                        />
+                        {repo.private ? (
+                          <LockIcon sx={{ fontSize: 14 }} className={mutedClass} />
+                        ) : (
+                          <PublicIcon sx={{ fontSize: 14 }} className={mutedClass} />
+                        )}
+                        <span className={`font-medium truncate ${textClass}`}>{repo.full_name}</span>
+                        {alreadyImported ? (
+                          <span className="ml-auto text-xs font-semibold text-green-600 dark:text-green-400 shrink-0">Imported</span>
+                        ) : (
+                          <>
+                            {repo.description && (
+                              <span className={`text-xs truncate ${mutedClass}`}>{repo.description}</span>
+                            )}
+                            <button
+                              type="button"
+                              onClick={e => {
+                                e.preventDefault()
+                                toggleRepoExpanded(repo.full_name)
+                              }}
+                              className={`ml-auto shrink-0 flex items-center gap-0.5 text-xs font-medium px-1.5 py-0.5 rounded transition-colors ${
+                                isDark ? 'text-[#8b949e] hover:text-white hover:bg-[#21262d]' : 'text-gray-500 hover:text-gray-800 hover:bg-gray-100'
+                              }`}
+                            >
+                              Mapping
+                              {isExpanded ? <KeyboardArrowUpIcon sx={{ fontSize: 16 }} /> : <KeyboardArrowDownIcon sx={{ fontSize: 16 }} />}
+                            </button>
+                          </>
+                        )}
+                      </label>
+
+                      {isExpanded && !alreadyImported && (
+                        <div className={`px-3 pb-3 pt-2 ml-6 space-y-3 border-t ${isDark ? 'border-[#21262d]' : 'border-gray-100'}`}>
+                          <div>
+                            <label className={`block text-xs font-semibold mb-1 ${textClass}`}>
+                              Artifact namespace
+                            </label>
+                            <p className={`text-xs mb-1.5 ${mutedClass}`}>
+                              Map the <code>{orgName}</code> GitHub org to the Docker/artifact namespace it publishes under.
+                            </p>
+                            <input
+                              type="text"
+                              value={mapping.artifactNamespace}
+                              onChange={e => updateMapping(repo.full_name, { artifactNamespace: e.target.value })}
+                              placeholder="e.g. deployhub"
+                              style={inputStyle}
+                              className="w-full text-sm px-2.5 py-1.5 rounded-md border outline-none"
+                            />
+                          </div>
+
+                          <div>
+                            <label className={`flex items-center gap-2 text-xs font-semibold cursor-pointer ${textClass}`}>
+                              <input
+                                type="checkbox"
+                                checked={mapping.isGitops}
+                                onChange={e => updateMapping(repo.full_name, { isGitops: e.target.checked })}
+                              />
+                              This is a GitOps repo (Helm charts / manifests)
+                            </label>
+                            {mapping.isGitops && (
+                              <>
+                                <p className={`text-xs mt-1 mb-1.5 ${mutedClass}`}>
+                                  Map it to the runtime endpoint it deploys to, as <code>&lt;endpoint name&gt;/&lt;namespace&gt;</code>.
+                                </p>
+                                <div className="flex items-center gap-2">
+                                  <input
+                                    type="text"
+                                    value={mapping.endpointName}
+                                    onChange={e => updateMapping(repo.full_name, { endpointName: e.target.value })}
+                                    placeholder="e.g. us-central-1_deployhub"
+                                    style={inputStyle}
+                                    className="flex-1 min-w-0 text-sm px-2.5 py-1.5 rounded-md border outline-none"
+                                  />
+                                  <span className={mutedClass}>/</span>
+                                  <input
+                                    type="text"
+                                    value={mapping.endpointNamespace}
+                                    onChange={e => updateMapping(repo.full_name, { endpointNamespace: e.target.value })}
+                                    placeholder="e.g. deployhub"
+                                    style={inputStyle}
+                                    className="flex-1 min-w-0 text-sm px-2.5 py-1.5 rounded-md border outline-none"
+                                  />
+                                </div>
+                              </>
+                            )}
+                          </div>
+                        </div>
                       )}
-                      <span className={`font-medium truncate ${textClass}`}>{repo.full_name}</span>
-                      {alreadyImported ? (
-                        <span className="ml-auto text-xs font-semibold text-green-600 dark:text-green-400 shrink-0">Imported</span>
-                      ) : repo.description ? (
-                        <span className={`text-xs truncate ${mutedClass}`}>{repo.description}</span>
-                      ) : null}
-                    </label>
+                    </div>
                   )
                 })}
               </div>
