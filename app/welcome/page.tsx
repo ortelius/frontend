@@ -26,6 +26,8 @@ interface GitHubAppRepo {
   description: string
   html_url: string
   private: boolean
+  // true when the repo is on the user's scan allow-list (already onboarded)
+  scanned?: boolean
 }
 
 // Per-repo mapping collected before import:
@@ -105,10 +107,11 @@ export default function WelcomePage() {
         setGithubConnected(true)
         const repos = Array.isArray(data) ? data : []
         setGithubRepos(repos)
-        // Default every repo to checked — if the GitHub App install was
-        // already scoped to a specific set of repos, "Import Selected" is
-        // then a single confirming click instead of re-picking them here.
-        setSelectedRepos(new Set(repos.map((r: GitHubAppRepo) => r.full_name)))
+        // Repos already onboarded (on the scan allow-list) show as Imported;
+        // only repos that are explicitly imported get scanned. Default the
+        // not-yet-imported ones to checked so a fresh connect is one click.
+        setImportedRepos(new Set(repos.filter((r: GitHubAppRepo) => r.scanned).map((r: GitHubAppRepo) => r.full_name)))
+        setSelectedRepos(new Set(repos.filter((r: GitHubAppRepo) => !r.scanned).map((r: GitHubAppRepo) => r.full_name)))
       } else {
         setGithubConnected(false)
       }
@@ -181,13 +184,14 @@ export default function WelcomePage() {
     }))
   }
 
-  // Stops scanning a repo: POST /github/exclude adds it to the user's
-  // github_excluded_repos (honored by relscanner-job) and drops its mapping.
-  // Existing releases/data are kept; access on the GitHub App itself is unchanged.
+  // Stops scanning an onboarded repo: POST /github/remove takes it off the
+  // user's scan allow-list (relscanner-job only scans onboarded repos) and drops
+  // its mapping. Existing releases/data are kept; the repo stays visible to the
+  // GitHub App, so it can be imported again later.
   const handleRemoveRepo = async (fullName: string) => {
     if (
       !window.confirm(
-        `Stop scanning ${fullName}?\n\nExisting releases and data are kept. To fully revoke access, also remove the repo from the GitHub App installation on GitHub.`
+        `Stop scanning ${fullName}?\n\nExisting releases and data are kept. You can import it again later.`
       )
     ) {
       return
@@ -196,28 +200,25 @@ export default function WelcomePage() {
     setImportMsg(null)
     try {
       const endpoint = await getEndpoint()
-      const res = await fetch(`${endpoint}/github/exclude`, {
+      const res = await fetch(`${endpoint}/github/remove`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
         body: JSON.stringify({ repos: [fullName] }),
       })
       if (res.ok) {
-        const drop = (prev: Set<string>) => {
+        setImportedRepos(prev => {
           const next = new Set(prev)
           next.delete(fullName)
           return next
-        }
-        setGithubRepos(prev => prev.filter(r => r.full_name !== fullName))
-        setSelectedRepos(drop)
-        setImportedRepos(drop)
-        setExpandedRepos(drop)
+        })
+        setGithubRepos(prev => prev.map(r => (r.full_name === fullName ? { ...r, scanned: false } : r)))
         setRepoMappings(prev => {
           const next = { ...prev }
           delete next[fullName]
           return next
         })
-        setImportMsg({ msg: `Removed ${fullName} from scanning`, ok: true })
+        setImportMsg({ msg: `Stopped scanning ${fullName}`, ok: true })
       } else {
         const data = await res.json().catch(() => ({}))
         setImportMsg({
@@ -484,7 +485,26 @@ export default function WelcomePage() {
                         )}
                         <span className={`font-medium truncate ${textClass}`}>{repo.full_name}</span>
                         {alreadyImported ? (
-                          <span className="ml-auto text-xs font-semibold text-green-600 dark:text-green-400 shrink-0">Imported</span>
+                          <>
+                            <span className="ml-auto text-xs font-semibold text-green-600 dark:text-green-400 shrink-0">Imported</span>
+                            <button
+                              type="button"
+                              title="Stop scanning this repo"
+                              aria-label={`Remove ${repo.full_name} from scanning`}
+                              disabled={removingRepo === repo.full_name}
+                              onClick={e => {
+                                e.preventDefault()
+                                e.stopPropagation()
+                                handleRemoveRepo(repo.full_name)
+                              }}
+                              className={`shrink-0 flex items-center gap-0.5 text-xs font-medium px-1.5 py-0.5 rounded transition-colors disabled:opacity-50 ${
+                                isDark ? 'text-[#f85149] hover:bg-[#21262d]' : 'text-red-600 hover:bg-red-50'
+                              }`}
+                            >
+                              <DeleteOutlineIcon sx={{ fontSize: 16 }} />
+                              {removingRepo === repo.full_name ? 'Removing…' : 'Remove'}
+                            </button>
+                          </>
                         ) : (
                           <>
                             {repo.description && (
@@ -505,23 +525,6 @@ export default function WelcomePage() {
                             </button>
                           </>
                         )}
-                        <button
-                          type="button"
-                          title="Stop scanning this repo"
-                          aria-label={`Remove ${repo.full_name} from scanning`}
-                          disabled={removingRepo === repo.full_name}
-                          onClick={e => {
-                            e.preventDefault()
-                            e.stopPropagation()
-                            handleRemoveRepo(repo.full_name)
-                          }}
-                          className={`shrink-0 flex items-center gap-0.5 text-xs font-medium px-1.5 py-0.5 rounded transition-colors disabled:opacity-50 ${
-                            isDark ? 'text-[#f85149] hover:bg-[#21262d]' : 'text-red-600 hover:bg-red-50'
-                          }`}
-                        >
-                          <DeleteOutlineIcon sx={{ fontSize: 16 }} />
-                          {removingRepo === repo.full_name ? 'Removing…' : 'Remove'}
-                        </button>
                       </label>
 
                       {isExpanded && !alreadyImported && (
