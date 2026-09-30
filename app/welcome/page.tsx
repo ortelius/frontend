@@ -28,6 +28,8 @@ interface GitHubAppRepo {
   private: boolean
   // true when the repo is on the user's scan allow-list (already onboarded)
   scanned?: boolean
+  // saved mapping for the repo (shown/edited after import)
+  mapping?: { artifactNamespace?: string; gitopsEndpoint?: string }
 }
 
 // Per-repo mapping collected before import:
@@ -75,9 +77,11 @@ export default function WelcomePage() {
   // handed off to the org list on finish so it can show a "Waiting on
   // import..." placeholder until the backend's import cycle catches up.
   const [addedOrgNames, setAddedOrgNames] = useState<Set<string>>(new Set())
-  const [importing, setImporting] = useState(false)
+  const [saving, setSaving] = useState(false)
   const [importMsg, setImportMsg] = useState<{ msg: string; ok: boolean } | null>(null)
   const [removingRepo, setRemovingRepo] = useState<string | null>(null)
+  // Mappings as last saved on the server; Cancel restores these and Save diffs against them.
+  const [savedMappings, setSavedMappings] = useState<Record<string, RepoMapping>>({})
 
   useEffect(() => {
     if (user === null) {
@@ -107,11 +111,26 @@ export default function WelcomePage() {
         setGithubConnected(true)
         const repos = Array.isArray(data) ? data : []
         setGithubRepos(repos)
-        // Repos already onboarded (on the scan allow-list) show as Imported;
-        // only repos that are explicitly imported get scanned. Default the
-        // not-yet-imported ones to checked so a fresh connect is one click.
+        // Repos already onboarded (on the scan allow-list) show as Imported.
+        // Only repos that are explicitly imported get scanned, so nothing is
+        // pre-selected: the user picks which repos to import.
         setImportedRepos(new Set(repos.filter((r: GitHubAppRepo) => r.scanned).map((r: GitHubAppRepo) => r.full_name)))
-        setSelectedRepos(new Set(repos.filter((r: GitHubAppRepo) => !r.scanned).map((r: GitHubAppRepo) => r.full_name)))
+        setSelectedRepos(new Set())
+        // Prefill the mapping editor with each repo's saved mapping.
+        const saved: Record<string, RepoMapping> = {}
+        repos.forEach((r: GitHubAppRepo) => {
+          if (!r.mapping) return
+          const ep = r.mapping.gitopsEndpoint || ''
+          const slash = ep.lastIndexOf('/')
+          saved[r.full_name] = {
+            artifactNamespace: r.mapping.artifactNamespace || '',
+            isGitops: ep !== '',
+            endpointName: slash > 0 ? ep.slice(0, slash) : ep,
+            endpointNamespace: slash > 0 ? ep.slice(slash + 1) : '',
+          }
+        })
+        setRepoMappings(saved)
+        setSavedMappings(saved)
       } else {
         setGithubConnected(false)
       }
@@ -184,6 +203,132 @@ export default function WelcomePage() {
     }))
   }
 
+  // Normalizes a mapping into what the API stores (empty string = not set).
+  const mappingPayload = (m: RepoMapping) => ({
+    artifactNamespace: m.artifactNamespace.trim(),
+    gitopsEndpoint:
+      m.isGitops && m.endpointName.trim() && m.endpointNamespace.trim()
+        ? `${m.endpointName.trim()}/${m.endpointNamespace.trim()}`
+        : '',
+  })
+
+  // Imported repos whose mapping was edited but not saved yet.
+  const dirtyImported = githubRepos
+    .map(r => r.full_name)
+    .filter(fullName => importedRepos.has(fullName))
+    .filter(
+      fullName =>
+        JSON.stringify(mappingPayload(getMapping(fullName))) !==
+        JSON.stringify(mappingPayload(savedMappings[fullName] || emptyMapping))
+    )
+  const hasPending = selectedRepos.size > 0 || dirtyImported.length > 0
+
+  // Save applies every pending change: imports the checked repos (POST
+  // /github/onboard) and saves edited mappings of already imported repos
+  // (PUT /github/mapping).
+  const handleSave = async () => {
+    if (!hasPending) return
+    setSaving(true)
+    setImportMsg(null)
+    const parts: string[] = []
+    let failed = false
+    try {
+      const endpoint = await getEndpoint()
+
+      // 1. Import newly selected repos (adds them to the scan list).
+      if (selectedRepos.size > 0) {
+        const toImport = Array.from(selectedRepos)
+        // Only send a mapping entry for repos where the user actually filled
+        // something in — an untouched repo just imports with no mapping.
+        const mappings: Record<string, { artifactNamespace: string | null; gitopsEndpoint: string | null }> = {}
+        toImport.forEach(fullName => {
+          const pl = mappingPayload(getMapping(fullName))
+          if (pl.artifactNamespace || pl.gitopsEndpoint) {
+            mappings[fullName] = {
+              artifactNamespace: pl.artifactNamespace || null,
+              gitopsEndpoint: pl.gitopsEndpoint || null,
+            }
+          }
+        })
+
+        const res = await fetch(`${endpoint}/github/onboard`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify({ repos: toImport, repoMappings: mappings }),
+        })
+        const data = await res.json().catch(() => ({}))
+        if (res.ok) {
+          setImportedRepos(prev => new Set([...prev, ...toImport]))
+          setAddedOrgNames(prev => {
+            const next = new Set(prev)
+            toImport.forEach(fullName => next.add(fullName.split('/')[0]))
+            return next
+          })
+          setSavedMappings(prev => {
+            const next = { ...prev }
+            toImport.forEach(fullName => {
+              next[fullName] = getMapping(fullName)
+            })
+            return next
+          })
+          setExpandedRepos(prev => {
+            const next = new Set(prev)
+            toImport.forEach(fullName => next.delete(fullName))
+            return next
+          })
+          setSelectedRepos(new Set())
+          parts.push(data.message || `Imported ${toImport.length} repo(s)`)
+        } else {
+          failed = true
+          parts.push(data.error || 'Failed to import selected repos')
+        }
+      }
+
+      // 2. Save edited mappings of repos that were already imported.
+      for (const fullName of dirtyImported) {
+        const pl = mappingPayload(getMapping(fullName))
+        const res = await fetch(`${endpoint}/github/mapping`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify({ repo: fullName, ...pl }),
+        })
+        const data = await res.json().catch(() => ({}))
+        if (res.ok) {
+          setSavedMappings(prev => ({ ...prev, [fullName]: getMapping(fullName) }))
+          setExpandedRepos(prev => {
+            const next = new Set(prev)
+            next.delete(fullName)
+            return next
+          })
+          parts.push(`Saved mapping for ${fullName}`)
+        } else {
+          failed = true
+          parts.push(
+            data.error ||
+              (res.status === 404 ? 'Mapping updates are not supported by this backend yet' : `Failed to save mapping for ${fullName}`)
+          )
+        }
+      }
+    } catch (e) {
+      failed = true
+      parts.push('Network error')
+    } finally {
+      setSaving(false)
+    }
+    setImportMsg({ msg: parts.join(' · '), ok: !failed })
+  }
+
+  // Cancel discards pending changes: unchecks repos, collapses the editors and
+  // restores mappings to what was last saved.
+  const handleCancel = () => {
+    setSelectedRepos(new Set())
+    setExpandedRepos(new Set())
+    setRepoMappings(savedMappings)
+    setImportMsg(null)
+  }
+
   // Stops scanning an onboarded repo: POST /github/remove takes it off the
   // user's scan allow-list (relscanner-job only scans onboarded repos) and drops
   // its mapping. Existing releases/data are kept; the repo stays visible to the
@@ -230,67 +375,6 @@ export default function WelcomePage() {
       setImportMsg({ msg: 'Network error', ok: false })
     } finally {
       setRemovingRepo(null)
-    }
-  }
-
-  const handleImportSelected = async () => {
-    if (selectedRepos.size === 0) return
-    setImporting(true)
-    setImportMsg(null)
-    try {
-      const endpoint = await getEndpoint()
-      // Only send a mapping entry for repos where the user actually filled
-      // something in — an untouched repo just imports with no mapping.
-      const mappings: Record<string, { artifactNamespace: string | null; gitopsEndpoint: string | null }> = {}
-      selectedRepos.forEach(fullName => {
-        const m = getMapping(fullName)
-        const artifactNamespace = m.artifactNamespace.trim()
-        const gitopsEndpoint =
-          m.isGitops && m.endpointName.trim() && m.endpointNamespace.trim()
-            ? `${m.endpointName.trim()}/${m.endpointNamespace.trim()}`
-            : ''
-        if (artifactNamespace || gitopsEndpoint) {
-          mappings[fullName] = {
-            artifactNamespace: artifactNamespace || null,
-            gitopsEndpoint: gitopsEndpoint || null,
-          }
-        }
-      })
-
-      const res = await fetch(`${endpoint}/github/onboard`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify({ repos: Array.from(selectedRepos), repoMappings: mappings }),
-      })
-      const data = await res.json()
-      if (res.ok) {
-        setImportedRepos(prev => new Set([...prev, ...selectedRepos]))
-        setAddedOrgNames(prev => {
-          const next = new Set(prev)
-          selectedRepos.forEach(fullName => next.add(fullName.split('/')[0]))
-          return next
-        })
-        setImportMsg({ msg: data.message || `Imported ${selectedRepos.size} repo(s)`, ok: true })
-        // Clean up mapping/expansion state for the repos we just imported.
-        setExpandedRepos(prev => {
-          const next = new Set(prev)
-          selectedRepos.forEach(fullName => next.delete(fullName))
-          return next
-        })
-        setRepoMappings(prev => {
-          const next = { ...prev }
-          selectedRepos.forEach(fullName => delete next[fullName])
-          return next
-        })
-        setSelectedRepos(new Set())
-      } else {
-        setImportMsg({ msg: data.error || 'Failed to import selected repos', ok: false })
-      }
-    } catch (e) {
-      setImportMsg({ msg: 'Network error', ok: false })
-    } finally {
-      setImporting(false)
     }
   }
 
@@ -468,7 +552,7 @@ export default function WelcomePage() {
                   return (
                     <div
                       key={repo.id}
-                      className={`${isDark ? 'bg-[#161b22]' : 'bg-white'} ${alreadyImported ? 'opacity-50' : ''}`}
+                      className={`${isDark ? 'bg-[#161b22]' : 'bg-white'} `}
                     >
                       <label className="flex items-center gap-3 px-3 py-2 text-sm cursor-pointer">
                         <input
@@ -487,6 +571,20 @@ export default function WelcomePage() {
                         {alreadyImported ? (
                           <>
                             <span className="ml-auto text-xs font-semibold text-green-600 dark:text-green-400 shrink-0">Imported</span>
+                            <button
+                              type="button"
+                              onClick={e => {
+                                e.preventDefault()
+                                e.stopPropagation()
+                                toggleRepoExpanded(repo.full_name)
+                              }}
+                              className={`shrink-0 flex items-center gap-0.5 text-xs font-medium px-1.5 py-0.5 rounded transition-colors ${
+                                isDark ? 'text-[#8b949e] hover:text-white hover:bg-[#21262d]' : 'text-gray-500 hover:text-gray-800 hover:bg-gray-100'
+                              }`}
+                            >
+                              Mapping
+                              {isExpanded ? <KeyboardArrowUpIcon sx={{ fontSize: 16 }} /> : <KeyboardArrowDownIcon sx={{ fontSize: 16 }} />}
+                            </button>
                             <button
                               type="button"
                               title="Stop scanning this repo"
@@ -527,7 +625,7 @@ export default function WelcomePage() {
                         )}
                       </label>
 
-                      {isExpanded && !alreadyImported && (
+                      {isExpanded && (
                         <div className={`px-3 pb-3 pt-2 ml-6 space-y-3 border-t ${isDark ? 'border-[#21262d]' : 'border-gray-100'}`}>
                           <div>
                             <label className={`block text-xs font-semibold mb-1 ${textClass}`}>
@@ -582,6 +680,12 @@ export default function WelcomePage() {
                               </>
                             )}
                           </div>
+
+                          {alreadyImported && (
+                            <p className={`text-xs ${mutedClass}`}>
+                              Changes apply to releases scanned from now on, once you click Save.
+                            </p>
+                          )}
                         </div>
                       )}
                     </div>
@@ -589,13 +693,36 @@ export default function WelcomePage() {
                 })}
               </div>
 
-              <button
-                onClick={handleImportSelected}
-                disabled={importing || selectedRepos.size === 0}
-                className="flex items-center gap-1.5 px-4 py-2 rounded-md bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white text-sm font-medium transition-colors"
-              >
-                {importing ? 'Importing…' : `Import ${selectedRepos.size || ''} Selected`}
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={handleSave}
+                  disabled={saving || !hasPending}
+                  className="flex items-center gap-1.5 px-4 py-2 rounded-md bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white text-sm font-medium transition-colors"
+                >
+                  {saving ? 'Saving…' : 'Save'}
+                </button>
+                <button
+                  onClick={handleCancel}
+                  disabled={saving || !hasPending}
+                  className={`px-4 py-2 rounded-md border text-sm font-medium transition-colors disabled:opacity-50 ${
+                    isDark
+                      ? 'border-[#30363d] text-[#c9d1d9] hover:bg-[#21262d]'
+                      : 'border-gray-300 text-gray-700 hover:bg-gray-50'
+                  }`}
+                >
+                  Cancel
+                </button>
+                {hasPending && (
+                  <span className={`text-xs ${mutedClass}`}>
+                    {[
+                      selectedRepos.size > 0 ? `${selectedRepos.size} to import` : '',
+                      dirtyImported.length > 0 ? `${dirtyImported.length} mapping change(s)` : '',
+                    ]
+                      .filter(Boolean)
+                      .join(' · ')}
+                  </span>
+                )}
+              </div>
 
               {importMsg && (
                 <p className={`text-sm mt-2 ${importMsg.ok ? (isDark ? 'text-green-400' : 'text-green-700') : (isDark ? 'text-red-400' : 'text-red-600')}`}>
