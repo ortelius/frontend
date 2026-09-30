@@ -15,6 +15,7 @@ import OpenInNewIcon from '@mui/icons-material/OpenInNew'
 import KeyboardArrowDownIcon from '@mui/icons-material/KeyboardArrowDown'
 import KeyboardArrowUpIcon from '@mui/icons-material/KeyboardArrowUp'
 import AddIcon from '@mui/icons-material/Add'
+import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline'
 import { setAllOrgVisibilityChecked } from '@/lib/Orgvisibilityfilter'
 import { addPendingOrgImports } from '@/lib/pendingImports'
 
@@ -74,6 +75,7 @@ export default function WelcomePage() {
   const [addedOrgNames, setAddedOrgNames] = useState<Set<string>>(new Set())
   const [importing, setImporting] = useState(false)
   const [importMsg, setImportMsg] = useState<{ msg: string; ok: boolean } | null>(null)
+  const [removingRepo, setRemovingRepo] = useState<string | null>(null)
 
   useEffect(() => {
     if (user === null) {
@@ -177,6 +179,57 @@ export default function WelcomePage() {
       ...prev,
       [fullName]: { ...getMapping(fullName), ...patch },
     }))
+  }
+
+  // Stops scanning a repo: POST /github/exclude adds it to the user's
+  // github_excluded_repos (honored by relscanner-job) and drops its mapping.
+  // Existing releases/data are kept; access on the GitHub App itself is unchanged.
+  const handleRemoveRepo = async (fullName: string) => {
+    if (
+      !window.confirm(
+        `Stop scanning ${fullName}?\n\nExisting releases and data are kept. To fully revoke access, also remove the repo from the GitHub App installation on GitHub.`
+      )
+    ) {
+      return
+    }
+    setRemovingRepo(fullName)
+    setImportMsg(null)
+    try {
+      const endpoint = await getEndpoint()
+      const res = await fetch(`${endpoint}/github/exclude`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ repos: [fullName] }),
+      })
+      if (res.ok) {
+        const drop = (prev: Set<string>) => {
+          const next = new Set(prev)
+          next.delete(fullName)
+          return next
+        }
+        setGithubRepos(prev => prev.filter(r => r.full_name !== fullName))
+        setSelectedRepos(drop)
+        setImportedRepos(drop)
+        setExpandedRepos(drop)
+        setRepoMappings(prev => {
+          const next = { ...prev }
+          delete next[fullName]
+          return next
+        })
+        setImportMsg({ msg: `Removed ${fullName} from scanning`, ok: true })
+      } else {
+        const data = await res.json().catch(() => ({}))
+        setImportMsg({
+          msg: data.error || (res.status === 404 ? 'Remove is not supported by this backend yet' : `Failed to remove ${fullName}`),
+          ok: false,
+        })
+      }
+    } catch (e) {
+      setImportMsg({ msg: 'Network error', ok: false })
+    } finally {
+      setRemovingRepo(null)
+    }
   }
 
   const handleImportSelected = async () => {
@@ -452,6 +505,23 @@ export default function WelcomePage() {
                             </button>
                           </>
                         )}
+                        <button
+                          type="button"
+                          title="Stop scanning this repo"
+                          aria-label={`Remove ${repo.full_name} from scanning`}
+                          disabled={removingRepo === repo.full_name}
+                          onClick={e => {
+                            e.preventDefault()
+                            e.stopPropagation()
+                            handleRemoveRepo(repo.full_name)
+                          }}
+                          className={`shrink-0 flex items-center gap-0.5 text-xs font-medium px-1.5 py-0.5 rounded transition-colors disabled:opacity-50 ${
+                            isDark ? 'text-[#f85149] hover:bg-[#21262d]' : 'text-red-600 hover:bg-red-50'
+                          }`}
+                        >
+                          <DeleteOutlineIcon sx={{ fontSize: 16 }} />
+                          {removingRepo === repo.full_name ? 'Removing…' : 'Remove'}
+                        </button>
                       </label>
 
                       {isExpanded && !alreadyImported && (
